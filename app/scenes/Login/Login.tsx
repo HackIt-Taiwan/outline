@@ -202,6 +202,10 @@ function Login({ children, onBack }: Props) {
   const firstRun =
     config.providers.length === 0 && !isCloudHosted && !config.name;
   const hasMultipleProviders = config.providers.length > 1;
+  const oidcProvider = find(
+    config.providers,
+    (provider) => provider.id === "oidc"
+  );
   const defaultProvider = find(
     config.providers,
     (provider) => provider.id === auth.lastSignedIn && !isCreate
@@ -270,15 +274,15 @@ function Login({ children, onBack }: Props) {
     );
   }
 
-  // If there is only one provider and it's OIDC, redirect immediately.
+  // If OIDC is available, send the user directly to the provider instead of showing the button.
   if (
-    config.providers.length === 1 &&
-    config.providers[0].id === "oidc" &&
+    oidcProvider &&
     !env.OIDC_DISABLE_REDIRECT &&
+    !isCreate &&
     !query.get("notice") &&
     !query.get("logout")
   ) {
-    window.location.href = getRedirectUrl(config.providers[0].authUrl);
+    window.location.href = getRedirectUrl(oidcProvider.authUrl);
     return null;
   }
 
