@@ -1,10 +1,12 @@
 import Router from "koa-router";
 import { WhereOptions } from "sequelize";
 import { randomUUID } from "crypto";
+import type { PresignedPost } from "@aws-sdk/s3-presigned-post";
 import { AttachmentPreset } from "@shared/types";
 import { bytesToHumanReadable, getFileNameFromUrl } from "@shared/utils/files";
 import { AttachmentValidation } from "@shared/validations";
 import { createContext } from "@server/context";
+import env from "@server/env";
 import {
   AuthorizationError,
   InvalidRequestError,
@@ -134,17 +136,29 @@ router.post(
       userId: user.id,
     });
 
-    const presignedPost = await FileStorage.getPresignedPost(
-      ctx,
-      key,
-      acl,
-      maxUploadSize,
-      contentType
-    );
+    let uploadUrl: string;
+    let method: "POST" | "PUT";
+    let presignedPost: Partial<PresignedPost> = { fields: {} };
+
+    if (env.AWS_S3_R2) {
+      uploadUrl = await FileStorage.getPresignedPut(key);
+      method = "PUT";
+    } else {
+      uploadUrl = FileStorage.getUploadUrl();
+      method = "POST";
+      presignedPost = await FileStorage.getPresignedPost(
+        ctx,
+        key,
+        acl,
+        maxUploadSize,
+        contentType
+      );
+    }
 
     ctx.body = {
       data: {
-        uploadUrl: FileStorage.getUploadUrl(),
+        uploadUrl,
+        method,
         form: {
           "Cache-Control": "max-age=31557600",
           "Content-Type": contentType,

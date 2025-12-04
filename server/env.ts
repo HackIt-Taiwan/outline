@@ -614,6 +614,14 @@ export class Environment {
   @IsOptional()
   public AWS_S3_ACL = environment.AWS_S3_ACL ?? "private";
 
+  @IsOptional()
+  public AWS_S3_R2 = this.toBoolean(environment.AWS_S3_R2 ?? "false");
+
+  @IsOptional()
+  public AWS_S3_R2_PUBLIC_URL = this.toOptionalString(
+    environment.AWS_S3_R2_PUBLIC_URL
+  );
+
   /**
    * Which file storage system to use
    */

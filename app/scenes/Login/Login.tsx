@@ -85,6 +85,22 @@ function Login({ children, onBack }: Props) {
   }, []);
 
   React.useEffect(() => {
+    if (notice !== "state-mismatch") {
+      return;
+    }
+
+    // Give users a clean retry on the first state mismatch to recover from
+    // transient auth issues without showing an error immediately.
+    const retryKey = "state-mismatch-retried";
+    if (sessionStorage.getItem(retryKey)) {
+      return;
+    }
+
+    sessionStorage.setItem(retryKey, "true");
+    window.location.replace(window.location.origin + window.location.pathname);
+  }, [notice]);
+
+  React.useEffect(() => {
     auth.fetchConfig().catch(setError);
   }, [auth]);
 

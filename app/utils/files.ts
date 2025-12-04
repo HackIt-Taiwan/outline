@@ -100,8 +100,14 @@ export const uploadFile = async (
       xhr.withCredentials = !requiresPreflightRequest;
     }
 
-    xhr.open("POST", data.uploadUrl, true);
-    xhr.send(formData);
+    const method = data.method ?? "POST";
+    xhr.open(method, data.uploadUrl, true);
+    if (method === "POST") {
+      xhr.send(formData);
+    } else {
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.send(file);
+    }
   });
 
   if (!success) {

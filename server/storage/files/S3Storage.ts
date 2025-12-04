@@ -4,6 +4,7 @@ import {
   S3Client,
   DeleteObjectCommand,
   GetObjectCommand,
+  PutObjectCommand,
   ObjectCannedACL,
   HeadObjectCommand,
   CopyObjectCommand,
@@ -60,6 +61,15 @@ export default class S3Storage extends BaseStorage {
     };
 
     return createPresignedPost(this.client, params);
+  }
+
+  public async getPresignedPut(key: string) {
+    const command = new PutObjectCommand({
+      Bucket: env.AWS_S3_UPLOAD_BUCKET_NAME,
+      Key: key,
+    });
+
+    return getSignedUrl(this.client, command, { expiresIn: 3600 });
   }
 
   private getPublicEndpoint(isServerUpload?: boolean) {
@@ -145,6 +155,10 @@ export default class S3Storage extends BaseStorage {
     key: string,
     expiresIn = S3Storage.defaultSignedUrlExpires
   ) => {
+    if (env.AWS_S3_R2) {
+      return this.getR2ObjectUrl(key);
+    }
+
     const isDocker = env.AWS_S3_UPLOAD_BUCKET_URL.match(/http:\/\/s3:/);
     const params = {
       Bucket: this.getBucket(),
@@ -167,6 +181,9 @@ export default class S3Storage extends BaseStorage {
       return url;
     }
   };
+
+  public getR2ObjectUrl = async (key: string) =>
+    env.AWS_S3_R2_PUBLIC_URL + "/" + key;
 
   public getFileHandle(key: string): Promise<{
     path: string;
