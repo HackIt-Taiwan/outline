@@ -11,7 +11,6 @@ import { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { BoardTag } from "@shared/types";
 import Button from "~/components/Button";
-import Card from "~/components/Card";
 import Flex from "~/components/Flex";
 import Heading from "~/components/Heading";
 import Input from "~/components/Input";
@@ -421,10 +420,14 @@ const CardsArea = styled.div<{ $isOver?: boolean }>`
   transition: border 120ms ease;
 `;
 
-const CardShell = styled(Card)`
+const CardShell = styled.div`
   padding: 12px;
   margin-bottom: 8px;
   cursor: grab;
+  background: ${s("cardBackground")};
+  border: 1px solid ${s("divider")};
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 `;
 
 const Count = styled.span`
