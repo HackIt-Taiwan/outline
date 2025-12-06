@@ -108,6 +108,9 @@ class WebsocketProvider extends Component<Props> {
       fileOperations,
       notifications,
       imports,
+      boards,
+      boardColumns,
+      boardCards,
     } = this.props;
 
     const currentUserId = auth?.user?.id;
@@ -252,6 +255,29 @@ class WebsocketProvider extends Component<Props> {
           collection?.updateDocument(event);
         }
       })
+    );
+
+    this.socket.on(
+      "boards.change",
+      action(
+        (event: {
+          board?: PartialExcept<any, "id">;
+          columns?: any[];
+          cards?: any[];
+          deletedColumnIds?: string[];
+          deletedCardIds?: string[];
+        }) => {
+          event.board && this.props.boards.add(event.board);
+          event.columns?.forEach(this.props.boardColumns.add);
+          event.cards?.forEach(this.props.boardCards.add);
+          event.deletedColumnIds?.forEach((id) =>
+            this.props.boardColumns.remove(id)
+          );
+          event.deletedCardIds?.forEach((id) =>
+            this.props.boardCards.remove(id)
+          );
+        }
+      )
     );
 
     this.socket.on(

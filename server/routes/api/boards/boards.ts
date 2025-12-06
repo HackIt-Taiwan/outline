@@ -1,7 +1,7 @@
 import fractionalIndex from "fractional-index";
 import Router from "koa-router";
 import { Op } from "sequelize";
-import { Board, BoardCard, BoardColumn, Document } from "@server/models";
+import { Board, BoardCard, BoardColumn, Document, Event } from "@server/models";
 import auth from "@server/middlewares/authentication";
 import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
@@ -76,6 +76,17 @@ async function ensureBoard(
 
   return createdBoard;
 }
+
+const emitBoardChange = (
+  ctx: APIContext,
+  documentId: string,
+  data: Record<string, any>
+) =>
+  Event.createFromContext(ctx, {
+    name: "boards.change",
+    documentId,
+    data,
+  });
 
 router.post(
   "boards.info",
@@ -157,6 +168,10 @@ router.post(
       data: presentBoard(board),
       policies: presentPolicies(user, [document]),
     };
+
+    await emitBoardChange(ctx, document.id, {
+      board: presentBoard(board),
+    });
   }
 );
 
@@ -204,6 +219,10 @@ router.post(
       data: presentBoardColumn(column),
       policies: presentPolicies(user, [document]),
     };
+
+    await emitBoardChange(ctx, document.id, {
+      columns: [presentBoardColumn(column)],
+    });
   }
 );
 
@@ -241,6 +260,10 @@ router.post(
       data: presentBoardColumn(column),
       policies: presentPolicies(user, [document]),
     };
+
+    await emitBoardChange(ctx, document.id, {
+      columns: [presentBoardColumn(column)],
+    });
   }
 );
 
@@ -287,6 +310,10 @@ router.post(
       data: presentBoardColumn(column),
       policies: presentPolicies(user, [document]),
     };
+
+    await emitBoardChange(ctx, document.id, {
+      columns: [presentBoardColumn(column)],
+    });
   }
 );
 
@@ -317,6 +344,10 @@ router.post(
       success: true,
       policies: presentPolicies(user, [document]),
     };
+
+    await emitBoardChange(ctx, document.id, {
+      deletedColumnIds: [id],
+    });
   }
 );
 
@@ -368,6 +399,10 @@ router.post(
       data: presentBoardCard(card),
       policies: presentPolicies(user, [document]),
     };
+
+    await emitBoardChange(ctx, document.id, {
+      cards: [presentBoardCard(card)],
+    });
   }
 );
 
@@ -415,6 +450,10 @@ router.post(
       data: presentBoardCard(card),
       policies: presentPolicies(user, [document]),
     };
+
+    await emitBoardChange(ctx, document.id, {
+      cards: [presentBoardCard(card)],
+    });
   }
 );
 
@@ -471,6 +510,10 @@ router.post(
       data: presentBoardCard(card),
       policies: presentPolicies(user, [document]),
     };
+
+    await emitBoardChange(ctx, document.id, {
+      cards: [presentBoardCard(card)],
+    });
   }
 );
 
@@ -501,6 +544,10 @@ router.post(
       success: true,
       policies: presentPolicies(user, [document]),
     };
+
+    await emitBoardChange(ctx, document.id, {
+      deletedCardIds: [id],
+    });
   }
 );
 

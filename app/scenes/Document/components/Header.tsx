@@ -2,7 +2,7 @@ import { observer } from "mobx-react";
 import { TableOfContentsIcon, EditIcon } from "outline-icons";
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useHistory } from "react-router-dom";
 import styled, { useTheme } from "styled-components";
 import Icon from "@shared/components/Icon";
 import useMeasure from "react-use-measure";
@@ -76,6 +76,7 @@ function DocumentHeader({
 }: Props) {
   const { t } = useTranslation();
   const { ui } = useStores();
+  const history = useHistory();
   const theme = useTheme();
   const team = useCurrentTeam({ rejectOnEmpty: false });
   const user = useCurrentUser({ rejectOnEmpty: false });
@@ -264,6 +265,27 @@ function DocumentHeader({
             {!isEditing && !isRevision && !isTemplate && can.update && (
               <Action>
                 <ShareButton document={document} />
+              </Action>
+            )}
+            {!isEditing && !isRevision && can.update && (
+              <Action>
+                <Button
+                  neutral
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        t(
+                          "切換為看板視圖後，預設將以看板呈現此內容，需切回文件時可再點右上切換。確認繼續？"
+                        )
+                      )
+                    ) {
+                      const slug = document.url.split("/").pop();
+                      history.push(`/kanban/${slug}`);
+                    }
+                  }}
+                >
+                  {t("切換看板")}
+                </Button>
               </Action>
             )}
             {(isEditing || isTemplateEditable) && (

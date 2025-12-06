@@ -618,6 +618,20 @@ export default class WebsocketsProcessor {
         });
       }
 
+      case "boards.change": {
+        if (!event.documentId) {
+          return;
+        }
+        const document = await Document.findByPk(event.documentId, {
+          paranoid: false,
+        });
+        if (!document) {
+          return;
+        }
+        const channels = await this.getDocumentEventChannels(event, document);
+        return socketio.to(channels).emit("boards.change", event.data);
+      }
+
       case "groups.create":
       case "groups.update": {
         const group = await Group.findByPk(event.modelId, {

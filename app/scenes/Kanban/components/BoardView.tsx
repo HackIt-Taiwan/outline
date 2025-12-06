@@ -262,24 +262,34 @@ function BoardView({ document, abilities, readOnly }: Props) {
   }
 
   return (
-    <Scrollable auto hideScrollbars>
+    <BoardSurface auto hideScrollbars>
       <Header>
         <div>
           <Heading>{document.title}</Heading>
           <Text type="secondary">Kanban board</Text>
         </div>
-        {!readOnly && (
-          <Flex align="center" gap={8}>
-            <Input
-              placeholder="New column name"
-              value={newColumnTitle}
-              onChange={(ev) => setNewColumnTitle(ev.target.value)}
-            />
-            <Button onClick={handleAddColumn} disabled={!newColumnTitle.trim()}>
-              Add column
-            </Button>
-          </Flex>
-        )}
+        <Flex align="center" gap={8}>
+          <Button
+            neutral
+            onClick={() => {
+              window.location.href = document.url;
+            }}
+          >
+            查看文件
+          </Button>
+          {!readOnly && (
+            <>
+              <Input
+                placeholder="New column name"
+                value={newColumnTitle}
+                onChange={(ev) => setNewColumnTitle(ev.target.value)}
+              />
+              <Button onClick={handleAddColumn} disabled={!newColumnTitle.trim()}>
+                Add column
+              </Button>
+            </>
+          )}
+        </Flex>
       </Header>
       <DndContext sensors={sensors} onDragEnd={handleCardMove}>
         <Columns>
@@ -388,54 +398,82 @@ const Header = styled(Flex)`
 `;
 
 const Columns = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
-  padding: 16px 24px 40px;
+  display: flex;
+  gap: 18px;
+  padding: 20px 28px 44px;
+  overflow-x: auto;
 `;
 
 const Column = styled.div`
-  background: ${s("cardBackground")};
+  background: linear-gradient(
+      145deg,
+      ${s("background")} 0%,
+      ${s("backgroundSecondary")} 100%
+    ),
+    ${s("cardBackground")};
   border: 1px solid ${s("divider")};
-  border-radius: 8px;
-  min-height: 200px;
+  border-radius: 14px;
+  min-height: 240px;
+  min-width: 320px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.05);
 `;
 
 const ColumnHeader = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 12px 0 12px;
+  padding: 14px 16px 0 16px;
 `;
 
 const CardsArea = styled.div<{ $isOver?: boolean }>`
-  padding: 8px 12px 12px;
-  min-height: 120px;
+  padding: 10px 14px 14px;
+  min-height: 140px;
   border: 1px dashed
     ${(props) => (props.$isOver ? s("accent") : "transparent")};
-  border-radius: 6px;
-  transition: border 120ms ease;
+  border-radius: 10px;
+  transition: border 120ms ease, background 120ms ease;
+  background: ${(props) =>
+    props.$isOver ? "rgba(255,255,255,0.03)" : "transparent"};
+  backdrop-filter: blur(4px);
 `;
 
 const CardShell = styled.div`
-  padding: 12px;
-  margin-bottom: 8px;
+  padding: 14px;
+  margin-bottom: 10px;
   cursor: grab;
-  background: ${s("cardBackground")};
+  background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0)
+    ),
+    ${s("cardBackground")};
   border: 1px solid ${s("divider")};
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 18px 36px rgba(0, 0, 0, 0.12),
+      0 1px 0 rgba(255, 255, 255, 0.05);
+  }
 `;
 
 const Count = styled.span`
-  background: ${s("smoke")};
-  color: ${s("textSecondary")};
+  background: ${s("accent")};
+  color: ${s("accentText")};
   border-radius: 10px;
-  padding: 2px 8px;
+  padding: 2px 10px;
   font-size: 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 `;
 
 const AddCardRow = styled(Flex)`
@@ -451,11 +489,14 @@ const TagRow = styled.div`
 `;
 
 const Tag = styled.span<{ $color?: string | null }>`
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 12px;
-  background: ${(props) => props.$color ?? s("background")};
+  background: ${(props) =>
+    props.$color ? props.$color : s("backgroundSecondary")};
   color: ${s("text")};
   font-size: 12px;
+  border: 1px solid ${s("divider")};
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 `;
 
 const MetaLine = styled(Text)`
@@ -464,7 +505,25 @@ const MetaLine = styled(Text)`
 `;
 
 const LoadingWrap = styled(Flex)`
-  padding: 48px;
+  padding: 64px;
   align-items: center;
   justify-content: center;
+`;
+
+const BoardSurface = styled(Scrollable)`
+  background: radial-gradient(
+      circle at 20% 20%,
+      rgba(255, 255, 255, 0.04),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 80% 10%,
+      rgba(255, 255, 255, 0.03),
+      transparent 28%
+    ),
+    linear-gradient(
+      135deg,
+      ${s("background")} 0%,
+      ${s("backgroundSecondary")} 100%
+    );
 `;
