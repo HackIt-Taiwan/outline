@@ -6,12 +6,13 @@ const IdSchema = z.object({
   id: z.string().uuid(),
 });
 
-const BoardLocatorSchema = z
-  .object({
-    documentId: z.string().uuid().optional(),
-    boardId: z.string().uuid().optional(),
-  })
-  .refine((val) => val.documentId || val.boardId, {
+const BoardLocatorBase = z.object({
+  documentId: z.string().uuid().optional(),
+  boardId: z.string().uuid().optional(),
+});
+
+const withLocator = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.refine((val) => val.documentId || val.boardId, {
     message: "documentId or boardId is required",
   });
 
@@ -22,7 +23,7 @@ const TagSchema: z.ZodType<BoardTag> = z.object({
 });
 
 export const BoardsInfoSchema = BaseSchema.extend({
-  body: BoardLocatorSchema,
+  body: withLocator(BoardLocatorBase),
 });
 export type BoardsInfoReq = z.infer<typeof BoardsInfoSchema>;
 
@@ -34,10 +35,12 @@ export const BoardsUpdateSchema = BaseSchema.extend({
 export type BoardsUpdateReq = z.infer<typeof BoardsUpdateSchema>;
 
 export const BoardColumnsCreateSchema = BaseSchema.extend({
-  body: BoardLocatorSchema.extend({
-    title: z.string().min(1).max(255),
-    color: z.string().nullable().optional(),
-  }),
+  body: withLocator(
+    BoardLocatorBase.extend({
+      title: z.string().min(1).max(255),
+      color: z.string().nullable().optional(),
+    })
+  ),
 });
 export type BoardColumnsCreateReq = z.infer<typeof BoardColumnsCreateSchema>;
 
@@ -63,14 +66,16 @@ export const BoardColumnsDeleteSchema = BaseSchema.extend({
 export type BoardColumnsDeleteReq = z.infer<typeof BoardColumnsDeleteSchema>;
 
 export const BoardCardsCreateSchema = BaseSchema.extend({
-  body: BoardLocatorSchema.extend({
-    columnId: z.string().uuid(),
-    title: z.string().min(1).max(255),
-    description: z.string().optional(),
-    tags: TagSchema.array().optional(),
-    metadata: z.record(z.any()).optional(),
-    assigneeId: z.string().uuid().optional().nullable(),
-  }),
+  body: withLocator(
+    BoardLocatorBase.extend({
+      columnId: z.string().uuid(),
+      title: z.string().min(1).max(255),
+      description: z.string().optional(),
+      tags: TagSchema.array().optional(),
+      metadata: z.record(z.any()).optional(),
+      assigneeId: z.string().uuid().optional().nullable(),
+    })
+  ),
 });
 export type BoardCardsCreateReq = z.infer<typeof BoardCardsCreateSchema>;
 
