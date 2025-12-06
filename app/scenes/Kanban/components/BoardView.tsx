@@ -7,20 +7,24 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { observer } from "mobx-react";
-import { useEffect, useMemo, useState } from "react";
+import { EditIcon, TrashIcon } from "outline-icons";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import styled from "styled-components";
 import { BoardTag } from "@shared/types";
+import { Avatar } from "~/components/Avatar";
 import Button from "~/components/Button";
 import Flex from "~/components/Flex";
 import Heading from "~/components/Heading";
 import Input from "~/components/Input";
 import LoadingIndicator from "~/components/LoadingIndicator";
 import Modal from "~/components/Modal";
+import NudeButton from "~/components/NudeButton";
 import Scrollable from "~/components/Scrollable";
 import Text from "~/components/Text";
 import BoardCardModel from "~/models/BoardCard";
 import BoardColumnModel from "~/models/BoardColumn";
 import Document from "~/models/Document";
+import User from "~/models/User";
 import useStores from "~/hooks/useStores";
 import { s } from "@shared/styles";
 
@@ -62,6 +66,116 @@ const TagEditor = ({ value, onChange }: TagEditorProps) => {
       }}
       placeholder="tag1, tag2"
     />
+  );
+};
+
+// User selector component with search
+type UserSelectorProps = {
+  value: string | null | undefined;
+  onChange: (userId: string | null, user: User | null) => void;
+  users: User[];
+};
+
+const UserSelector = ({ value, onChange, users }: UserSelectorProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const selectedUser = useMemo(
+    () => (value ? users.find((u) => u.id === value) : null),
+    [value, users]
+  );
+
+  const filteredUsers = useMemo(() => {
+    if (!search.trim()) {
+      return users;
+    }
+    const searchLower = search.toLowerCase();
+    return users.filter(
+      (user) =>
+        user.name.toLowerCase().includes(searchLower) ||
+        user.email?.toLowerCase().includes(searchLower)
+    );
+  }, [users, search]);
+
+  const handleSelect = useCallback(
+    (user: User | null) => {
+      onChange(user?.id ?? null, user);
+      setIsOpen(false);
+      setSearch("");
+    },
+    [onChange]
+  );
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <UserSelectorWrapper ref={dropdownRef}>
+      <UserSelectorLabel>Assignee</UserSelectorLabel>
+      <UserSelectorTrigger onClick={() => setIsOpen(!isOpen)}>
+        {selectedUser ? (
+          <Flex align="center" gap={8}>
+            <Avatar model={selectedUser} size={24} />
+            <span>{selectedUser.name}</span>
+          </Flex>
+        ) : (
+          <Text type="secondary">Select assignee...</Text>
+        )}
+      </UserSelectorTrigger>
+      {isOpen && (
+        <UserDropdown>
+          <UserSearchInput
+            ref={inputRef}
+            value={search}
+            onChange={(ev) => setSearch(ev.target.value)}
+            placeholder="Search users..."
+            autoFocus
+          />
+          <UserList>
+            <UserOption onClick={() => handleSelect(null)}>
+              <Text type="secondary">No assignee</Text>
+            </UserOption>
+            {filteredUsers.map((user) => (
+              <UserOption
+                key={user.id}
+                onClick={() => handleSelect(user)}
+                $selected={user.id === value}
+              >
+                <Avatar model={user} size={24} />
+                <Flex column style={{ minWidth: 0 }}>
+                  <Text weight="bold" ellipsis>
+                    {user.name}
+                  </Text>
+                  {user.email && (
+                    <Text type="tertiary" size="small" ellipsis>
+                      {user.email}
+                    </Text>
+                  )}
+                </Flex>
+              </UserOption>
+            ))}
+            {filteredUsers.length === 0 && (
+              <UserOption>
+                <Text type="secondary">No users found</Text>
+              </UserOption>
+            )}
+          </UserList>
+        </UserDropdown>
+      )}
+    </UserSelectorWrapper>
   );
 };
 
@@ -136,6 +250,8 @@ function BoardView({ document, abilities, readOnly }: Props) {
   const [newColumnTitle, setNewColumnTitle] = useState("");
   const [newCardTitle, setNewCardTitle] = useState<Record<string, string>>({});
   const [selectedCard, setSelectedCard] = useState<BoardCardModel | null>(null);
+  const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
+  const [editingColumnTitle, setEditingColumnTitle] = useState("");
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -143,6 +259,11 @@ function BoardView({ document, abilities, readOnly }: Props) {
       },
     })
   );
+
+  // Fetch all users for the assignee selector
+  useEffect(() => {
+    void users.fetchPage({ limit: 100 });
+  }, [users]);
 
   useEffect(() => {
     setLoading(true);
@@ -249,15 +370,58 @@ function BoardView({ document, abilities, readOnly }: Props) {
     setSelectedCard(null);
   };
 
-  const handleSelectAssignee = (userId: string | null) => {
+  const handleSelectAssignee = (userId: string | null, user: User | null) => {
     setSelectedCard((prev) =>
       prev
         ? Object.assign(
           prev,
-          { assigneeId: userId, assignee: userId ? users.get(userId) : null } // mutate observable
+          { assigneeId: userId, assignee: user } // mutate observable
         )
         : null
     );
+  };
+
+  const handleEditColumn = (column: BoardColumnModel) => {
+    setEditingColumnId(column.id);
+    setEditingColumnTitle(column.title);
+  };
+
+  const handleSaveColumnTitle = async () => {
+    if (!editingColumnId || !editingColumnTitle.trim()) {
+      setEditingColumnId(null);
+      return;
+    }
+    await boardColumns.update({
+      id: editingColumnId,
+      title: editingColumnTitle.trim(),
+    });
+    setEditingColumnId(null);
+    setEditingColumnTitle("");
+  };
+
+  const handleDeleteColumn = async (column: BoardColumnModel) => {
+    // Don't allow deleting the last column
+    if (columns.length <= 1) {
+      return;
+    }
+
+    // Find the first column (that's not the one being deleted) to move cards to
+    const targetColumn = columns.find((c) => c.id !== column.id);
+    if (!targetColumn) {
+      return;
+    }
+
+    // Move all cards from this column to the first column
+    const cardsInColumn = boardCards.inColumn(column.id);
+    for (const card of cardsInColumn) {
+      await boardCards.move({
+        id: card.id,
+        columnId: targetColumn.id,
+      });
+    }
+
+    // Delete the column
+    await boardColumns.delete(column);
   };
 
   if (isLoading || !boardId) {
@@ -311,10 +475,56 @@ function BoardView({ document, abilities, readOnly }: Props) {
         <Columns>
           {columns.map((column) => {
             const cards = boardCards.inColumn(column.id);
+            const isEditing = editingColumnId === column.id;
             return (
               <Column key={column.id}>
                 <ColumnHeader>
-                  <Text weight="bold">{column.title}</Text>
+                  {isEditing ? (
+                    <ColumnTitleInput
+                      value={editingColumnTitle}
+                      onChange={(ev) => setEditingColumnTitle(ev.target.value)}
+                      onBlur={handleSaveColumnTitle}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter") {
+                          handleSaveColumnTitle();
+                        } else if (ev.key === "Escape") {
+                          setEditingColumnId(null);
+                        }
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <ColumnTitleRow>
+                      <Text weight="bold">{column.title}</Text>
+                      {!readOnly && (
+                        <ColumnActions>
+                          <ColumnActionButton
+                            onClick={() => handleEditColumn(column)}
+                            title="Edit column"
+                          >
+                            <EditIcon size={16} />
+                          </ColumnActionButton>
+                          {columns.length > 1 && (
+                            <ColumnActionButton
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `確定要刪除「${column.title}」嗎？該分類中的卡片將移轉到第一個分類。`
+                                  )
+                                ) {
+                                  handleDeleteColumn(column);
+                                }
+                              }}
+                              title="Delete column"
+                              $danger
+                            >
+                              <TrashIcon size={16} />
+                            </ColumnActionButton>
+                          )}
+                        </ColumnActions>
+                      )}
+                    </ColumnTitleRow>
+                  )}
                   <Count>{cards.length}</Count>
                 </ColumnHeader>
                 <SortableContext
@@ -380,12 +590,10 @@ function BoardView({ document, abilities, readOnly }: Props) {
               value={selectedCard.tags}
               onChange={(tags) => (selectedCard.tags = tags)}
             />
-            <Input
-              label="Assignee (user id)"
-              value={selectedCard.assigneeId ?? ""}
-              onChange={(ev) =>
-                handleSelectAssignee(ev.target.value || null)
-              }
+            <UserSelector
+              value={selectedCard.assigneeId}
+              onChange={handleSelectAssignee}
+              users={users.orderedData}
             />
             {!readOnly && (
               <Flex gap={8}>
@@ -444,6 +652,51 @@ const ColumnHeader = styled.div`
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px 0 16px;
+`;
+
+const ColumnTitleRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const ColumnActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+
+  ${ColumnHeader}:hover & {
+    opacity: 1;
+  }
+`;
+
+const ColumnActionButton = styled(NudeButton) <{ $danger?: boolean }>`
+  width: 24px;
+  height: 24px;
+  color: ${(props) => (props.$danger ? s("danger") : s("textSecondary"))};
+
+  &:hover {
+    color: ${(props) => (props.$danger ? s("danger") : s("text"))};
+    background: ${s("secondaryBackground")};
+  }
+`;
+
+const ColumnTitleInput = styled.input`
+  border: 1px solid ${s("inputBorder")};
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  background: ${s("background")};
+  color: ${s("text")};
+  outline: none;
+  width: 150px;
+
+  &:focus {
+    border-color: ${s("accent")};
+  }
 `;
 
 const CardsArea = styled.div<{ $isOver?: boolean }>`
@@ -542,4 +795,85 @@ const BoardSurface = styled(Scrollable)`
       ${s("background")} 0%,
       ${s("backgroundSecondary")} 100%
     );
+`;
+
+// User selector styles
+const UserSelectorWrapper = styled.div`
+  position: relative;
+`;
+
+const UserSelectorLabel = styled.label`
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: ${s("text")};
+  margin-bottom: 4px;
+`;
+
+const UserSelectorTrigger = styled.button`
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid ${s("inputBorder")};
+  border-radius: 4px;
+  background: ${s("background")};
+  color: ${s("text")};
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+
+  &:hover {
+    border-color: ${s("inputBorderFocused")};
+  }
+`;
+
+const UserDropdown = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: ${s("menuBackground")};
+  border: 1px solid ${s("inputBorder")};
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  max-height: 300px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+`;
+
+const UserSearchInput = styled.input`
+  padding: 12px;
+  border: none;
+  border-bottom: 1px solid ${s("divider")};
+  background: transparent;
+  color: ${s("text")};
+  font-size: 14px;
+  outline: none;
+
+  &::placeholder {
+    color: ${s("textSecondary")};
+  }
+`;
+
+const UserList = styled.div`
+  overflow-y: auto;
+  max-height: 250px;
+`;
+
+const UserOption = styled.div<{ $selected?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: ${(props) =>
+    props.$selected ? s("accent") : "transparent"};
+  color: ${(props) => (props.$selected ? s("accentText") : s("text"))};
+
+  &:hover {
+    background: ${(props) =>
+    props.$selected ? s("accent") : s("secondaryBackground")};
+  }
 `;
