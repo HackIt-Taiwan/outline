@@ -23,6 +23,7 @@ export default class BoardsStore extends Store<Board> {
       res.data.columns?.forEach(this.rootStore.boardColumns.add);
       res.data.cards?.forEach(this.rootStore.boardCards.add);
       this.addPolicies(res.policies);
+      this.isLoaded = true;
       return board;
     });
   }

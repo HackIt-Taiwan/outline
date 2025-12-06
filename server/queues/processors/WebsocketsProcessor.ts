@@ -40,6 +40,8 @@ import presentNotification from "@server/presenters/notification";
 import { Event } from "../../types";
 
 export default class WebsocketsProcessor {
+  static applicableEvents = ["*", "boards.change"];
+
   public async perform(event: Event, socketio: Server) {
     switch (event.name) {
       case "documents.create":

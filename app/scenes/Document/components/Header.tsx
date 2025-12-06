@@ -40,6 +40,7 @@ import ObservingBanner from "./ObservingBanner";
 import PublicBreadcrumb from "./PublicBreadcrumb";
 import ShareButton from "./ShareButton";
 import { AppearanceAction } from "~/components/Sharing/components/Actions";
+import { client } from "~/utils/ApiClient";
 
 type Props = {
   document: Document;
@@ -271,17 +272,21 @@ function DocumentHeader({
               <Action>
                 <Button
                   neutral
-                  onClick={() => {
+                  onClick={async () => {
                     if (
-                      window.confirm(
+                      !window.confirm(
                         t(
-                          "切換為看板視圖後，預設將以看板呈現此內容，需切回文件時可再點右上切換。確認繼續？"
+                          "啟用看板後，預設將以看板呈現此內容，可再從右上切換回文件。確認啟用？"
                         )
                       )
                     ) {
-                      const slug = document.url.split("/").pop();
-                      history.push(`/kanban/${slug}`);
+                      return;
                     }
+                    await client.post("/boards.enable", {
+                      documentId: document.id,
+                    });
+                    const slug = document.url.split("/").pop();
+                    history.push(`/kanban/${slug}`);
                   }}
                 >
                   {t("切換看板")}

@@ -40,15 +40,7 @@ async function loadDocument(
   return Document.findByPk(documentId, { userId, rejectOnEmpty: true });
 }
 
-async function ensureBoard(
-  ctx: APIContext,
-  document: Document,
-  existingBoard?: Board | null
-) {
-  if (existingBoard) {
-    return existingBoard;
-  }
-
+async function createBoardWithDefaults(ctx: APIContext, document: Document) {
   const { user } = ctx.state.auth;
   const createdBoard = await Board.createWithCtx(ctx, {
     documentId: document.id,
@@ -101,13 +93,16 @@ router.post(
     const document = await loadDocument(user.id, documentId, boardId);
     authorize(user, "read", document);
 
-    const existingBoard = boardId
+    const board = boardId
       ? await Board.findByPk(boardId, { transaction })
       : await Board.findOne({
           where: { documentId: document.id, teamId: user.teamId },
           transaction,
         });
-    const board = await ensureBoard(ctx, document, existingBoard);
+    if (!board) {
+      ctx.throw(404, "Board not enabled for this document");
+      return;
+    }
 
     const [columns, cards] = await Promise.all([
       BoardColumn.findAll({
@@ -134,6 +129,48 @@ router.post(
         columns: columns.map(presentBoardColumn),
         cards: cards.map(presentBoardCard),
       },
+      policies: presentPolicies(user, [document]),
+    };
+  }
+);
+
+router.post(
+  "boards.enable",
+  auth(),
+  transaction(),
+  validate(T.BoardsEnableSchema),
+  async (ctx: APIContext<T.BoardsEnableReq>) => {
+    const { documentId } = ctx.input.body;
+    const { user } = ctx.state.auth;
+    const { transaction } = ctx.state;
+
+    const document = await Document.findByPk(documentId, {
+      userId: user.id,
+      transaction,
+      rejectOnEmpty: true,
+    });
+    authorize(user, "update", document);
+
+    const existing = await Board.findOne({
+      where: { documentId, teamId: user.teamId },
+      transaction,
+    });
+    if (existing) {
+      ctx.body = {
+        data: presentBoard(existing),
+        policies: presentPolicies(user, [document]),
+      };
+      return;
+    }
+
+    const board = await createBoardWithDefaults(ctx, document);
+
+    await emitBoardChange(ctx, document.id, {
+      board: presentBoard(board),
+    });
+
+    ctx.body = {
+      data: presentBoard(board),
       policies: presentPolicies(user, [document]),
     };
   }

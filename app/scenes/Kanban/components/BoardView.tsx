@@ -132,6 +132,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
   const { boards, boardColumns, boardCards, users } = useStores();
   const [boardId, setBoardId] = useState<string | null>(null);
   const [isLoading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [newColumnTitle, setNewColumnTitle] = useState("");
   const [newCardTitle, setNewCardTitle] = useState<Record<string, string>>({});
   const [selectedCard, setSelectedCard] = useState<BoardCardModel | null>(null);
@@ -147,7 +148,13 @@ function BoardView({ document, abilities, readOnly }: Props) {
     setLoading(true);
     boards
       .fetchForDocument(document.id)
-      .then((board) => setBoardId(board.id))
+      .then((board) => {
+        setBoardId(board.id);
+        setLoadError(null);
+      })
+      .catch((err) => {
+        setLoadError(err?.message ?? "Unable to load board");
+      })
       .finally(() => setLoading(false));
   }, [boards, document.id]);
 
@@ -256,7 +263,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
   if (isLoading || !boardId) {
     return (
       <LoadingWrap>
-        <LoadingIndicator />
+        {loadError ? <Text type="danger">{loadError}</Text> : <LoadingIndicator />}
       </LoadingWrap>
     );
   }

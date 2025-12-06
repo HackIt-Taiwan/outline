@@ -27,6 +27,13 @@ export const BoardsInfoSchema = BaseSchema.extend({
 });
 export type BoardsInfoReq = z.infer<typeof BoardsInfoSchema>;
 
+export const BoardsEnableSchema = BaseSchema.extend({
+  body: z.object({
+    documentId: z.string().uuid(),
+  }),
+});
+export type BoardsEnableReq = z.infer<typeof BoardsEnableSchema>;
+
 export const BoardsUpdateSchema = BaseSchema.extend({
   body: IdSchema.extend({
     title: z.string().min(1).max(255),
