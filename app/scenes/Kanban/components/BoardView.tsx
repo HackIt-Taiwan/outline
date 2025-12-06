@@ -384,7 +384,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
           </Flex>
         )}
       </Modal>
-    </Scrollable>
+    </BoardSurface>
   );
 }
 
