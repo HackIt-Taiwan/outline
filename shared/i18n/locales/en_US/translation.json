@@ -717,6 +717,8 @@
   "available when headings are added": "available when headings are added",
   "Edit {{noun}}": "Edit {{noun}}",
   "Archived": "Archived",
+  "切換為看板視圖後，預設將以看板呈現此內容，需切回文件時可再點右上切換。確認繼續？": "切換為看板視圖後，預設將以看板呈現此內容，需切回文件時可再點右上切換。確認繼續？",
+  "切換看板": "切換看板",
   "Save draft": "Save draft",
   "Done editing": "Done editing",
   "Restore version": "Restore version",

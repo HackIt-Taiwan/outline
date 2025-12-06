@@ -313,6 +313,9 @@ class WebsocketProvider extends Component<Props> {
       action((event: PartialExcept<Document, "id">) => {
         const model = documents.add(event);
         documents.addToArchive(model);
+        boards.removeByDocument(event.id);
+        boardColumns.removeByDocument(event.id);
+        boardCards.removeByDocument(event.id);
 
         if (event.collectionId) {
           const collection = collections.get(event.collectionId);
@@ -326,6 +329,9 @@ class WebsocketProvider extends Component<Props> {
       action((event: PartialExcept<Document, "id">) => {
         documents.add(event);
         policies.remove(event.id);
+        boards.removeByDocument(event.id);
+        boardColumns.removeByDocument(event.id);
+        boardCards.removeByDocument(event.id);
 
         if (event.collectionId) {
           const collection = collections.get(event.collectionId);
@@ -342,6 +348,9 @@ class WebsocketProvider extends Component<Props> {
       "documents.permanent_delete",
       (event: WebsocketEntityDeletedEvent) => {
         documents.remove(event.modelId);
+        boards.removeByDocument(event.modelId);
+        boardColumns.removeByDocument(event.modelId);
+        boardCards.removeByDocument(event.modelId);
       }
     );
 

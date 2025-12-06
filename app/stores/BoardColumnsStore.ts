@@ -26,6 +26,13 @@ export default class BoardColumnsStore extends Store<BoardColumn> {
   }
 
   @action
+  removeByDocument(documentId: string) {
+    this.filter((col) => col.documentId === documentId).forEach((col) =>
+      this.remove(col.id)
+    );
+  }
+
+  @action
   async move({
     id,
     beforeId,

@@ -31,6 +31,13 @@ export default class BoardCardsStore extends Store<BoardCard> {
   }
 
   @action
+  removeByDocument(documentId: string) {
+    this.filter((card) => card.documentId === documentId).forEach((card) =>
+      this.remove(card.id)
+    );
+  }
+
+  @action
   async move({
     id,
     columnId,

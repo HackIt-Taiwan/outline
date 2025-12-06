@@ -26,4 +26,11 @@ export default class BoardsStore extends Store<Board> {
       return board;
     });
   }
+
+  @action
+  removeByDocument(documentId: string) {
+    this.filter((b) => b.documentId === documentId).forEach((b) =>
+      this.remove(b.id)
+    );
+  }
 }
