@@ -1,4 +1,10 @@
-import { DndContext, DragEndEvent, useDroppable } from "@dnd-kit/core";
+import {
+  DndContext,
+  DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
+  useDroppable,
+} from "@dnd-kit/core";
 import { PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -7,11 +13,11 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { observer } from "mobx-react";
-import { EditIcon, TrashIcon } from "outline-icons";
+import { EditIcon, TrashIcon, PlusIcon } from "outline-icons";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import styled from "styled-components";
+import styled, { css, keyframes } from "styled-components";
 import { BoardTag } from "@shared/types";
-import { Avatar } from "~/components/Avatar";
+import { Avatar, AvatarSize } from "~/components/Avatar";
 import Button from "~/components/Button";
 import Flex from "~/components/Flex";
 import Heading from "~/components/Heading";
@@ -27,6 +33,25 @@ import Document from "~/models/Document";
 import User from "~/models/User";
 import useStores from "~/hooks/useStores";
 import { s } from "@shared/styles";
+
+// Helper function to truncate text
+const truncateText = (text: string, maxLength: number = 80) => {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return text.substring(0, maxLength).trim() + "...";
+};
+
+// Default column colors for visual variety
+const DEFAULT_COLUMN_COLORS = [
+  "#6366f1", // indigo
+  "#8b5cf6", // violet
+  "#06b6d4", // cyan
+  "#10b981", // emerald
+  "#f59e0b", // amber
+  "#ef4444", // red
+  "#ec4899", // pink
+];
 
 type Props = {
   document: Document;
@@ -124,15 +149,16 @@ const UserSelector = ({ value, onChange, users }: UserSelectorProps) => {
 
   return (
     <UserSelectorWrapper ref={dropdownRef}>
-      <UserSelectorLabel>Assignee</UserSelectorLabel>
       <UserSelectorTrigger onClick={() => setIsOpen(!isOpen)}>
         {selectedUser ? (
           <Flex align="center" gap={8}>
-            <Avatar model={selectedUser} size={24} />
+            <Avatar model={selectedUser} size={AvatarSize.Medium} />
             <span>{selectedUser.name}</span>
           </Flex>
         ) : (
-          <Text type="secondary">Select assignee...</Text>
+          <Text type="tertiary" size="small">
+            Select assignee...
+          </Text>
         )}
       </UserSelectorTrigger>
       {isOpen && (
@@ -146,7 +172,9 @@ const UserSelector = ({ value, onChange, users }: UserSelectorProps) => {
           />
           <UserList>
             <UserOption onClick={() => handleSelect(null)}>
-              <Text type="secondary">No assignee</Text>
+              <Text type="tertiary" size="small">
+                No assignee
+              </Text>
             </UserOption>
             {filteredUsers.map((user) => (
               <UserOption
@@ -154,13 +182,13 @@ const UserSelector = ({ value, onChange, users }: UserSelectorProps) => {
                 onClick={() => handleSelect(user)}
                 $selected={user.id === value}
               >
-                <Avatar model={user} size={24} />
+                <Avatar model={user} size={AvatarSize.Medium} />
                 <Flex column style={{ minWidth: 0 }}>
-                  <Text weight="bold" ellipsis>
+                  <Text weight="bold" size="small" ellipsis>
                     {user.name}
                   </Text>
                   {user.email && (
-                    <Text type="tertiary" size="small" ellipsis>
+                    <Text type="tertiary" size="xsmall" ellipsis>
                       {user.email}
                     </Text>
                   )}
@@ -169,7 +197,9 @@ const UserSelector = ({ value, onChange, users }: UserSelectorProps) => {
             ))}
             {filteredUsers.length === 0 && (
               <UserOption>
-                <Text type="secondary">No users found</Text>
+                <Text type="tertiary" size="small">
+                  No users found
+                </Text>
               </UserOption>
             )}
           </UserList>
@@ -204,43 +234,91 @@ function ColumnDroppable({
 type SortableCardProps = {
   card: BoardCardModel;
   onSelect: (card: BoardCardModel) => void;
+  isDragOverlay?: boolean;
 };
 
-const SortableCard = ({ card, onSelect }: SortableCardProps) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: card.id,
-      data: { type: "card", columnId: card.columnId },
-    });
+const SortableCard = ({ card, onSelect, isDragOverlay }: SortableCardProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: card.id,
+    data: { type: "card", columnId: card.columnId },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   return (
     <CardShell
       ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.6 : 1,
-      }}
+      style={style}
+      $isDragging={isDragging}
+      $isDragOverlay={isDragOverlay}
       {...attributes}
       {...listeners}
-      onClick={() => onSelect(card)}
+      onClick={() => !isDragging && onSelect(card)}
     >
-      <Text weight="bold">{card.title}</Text>
-      {card.tags?.length ? (
-        <TagRow>
-          {card.tags.map((tag) => (
-            <Tag key={tag.id} $color={tag.color}>
-              {tag.name}
-            </Tag>
-          ))}
-        </TagRow>
-      ) : null}
-      {card.assigneeId ? (
-        <MetaLine>{`Assignee: ${card.assignee?.name ?? "Unknown"}`}</MetaLine>
-      ) : null}
+      <CardContent>
+        <CardTitle>{card.title}</CardTitle>
+        {card.description && (
+          <CardDescription>
+            {truncateText(card.description, 100)}
+          </CardDescription>
+        )}
+        {card.tags?.length ? (
+          <CardTagRow>
+            {card.tags.slice(0, 3).map((tag) => (
+              <CardTag key={tag.id} $color={tag.color}>
+                {tag.name}
+              </CardTag>
+            ))}
+            {card.tags.length > 3 && (
+              <CardTagMore>+{card.tags.length - 3}</CardTagMore>
+            )}
+          </CardTagRow>
+        ) : null}
+      </CardContent>
+      {card.assignee && (
+        <CardFooter>
+          <Avatar model={card.assignee} size={AvatarSize.Medium} />
+        </CardFooter>
+      )}
     </CardShell>
   );
 };
+
+// Card preview for drag overlay
+const CardPreview = ({ card }: { card: BoardCardModel }) => (
+  <CardShell $isDragOverlay>
+    <CardContent>
+      <CardTitle>{card.title}</CardTitle>
+      {card.description && (
+        <CardDescription>{truncateText(card.description, 100)}</CardDescription>
+      )}
+      {card.tags?.length ? (
+        <CardTagRow>
+          {card.tags.slice(0, 3).map((tag) => (
+            <CardTag key={tag.id} $color={tag.color}>
+              {tag.name}
+            </CardTag>
+          ))}
+        </CardTagRow>
+      ) : null}
+    </CardContent>
+    {card.assignee && (
+      <CardFooter>
+        <Avatar model={card.assignee} size={AvatarSize.Medium} />
+      </CardFooter>
+    )}
+  </CardShell>
+);
 
 function BoardView({ document, abilities, readOnly }: Props) {
   const { boards, boardColumns, boardCards, users } = useStores();
@@ -252,6 +330,11 @@ function BoardView({ document, abilities, readOnly }: Props) {
   const [selectedCard, setSelectedCard] = useState<BoardCardModel | null>(null);
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
   const [editingColumnTitle, setEditingColumnTitle] = useState("");
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [addingCardColumnId, setAddingCardColumnId] = useState<string | null>(
+    null
+  );
+  const addCardInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -259,6 +342,8 @@ function BoardView({ document, abilities, readOnly }: Props) {
       },
     })
   );
+
+  const activeCard = activeCardId ? boardCards.get(activeCardId) : null;
 
   // Fetch all users for the assignee selector
   useEffect(() => {
@@ -305,12 +390,18 @@ function BoardView({ document, abilities, readOnly }: Props) {
       title: title.trim(),
       columnId: column.id,
       documentId: document.id,
-      boardId,
+      boardId: boardId ?? undefined,
     });
     setNewCardTitle((prev) => ({ ...prev, [column.id]: "" }));
+    setAddingCardColumnId(null);
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveCardId(event.active.id as string);
   };
 
   const handleCardMove = async (event: DragEndEvent) => {
+    setActiveCardId(null);
     if (readOnly) {
       return;
     }
@@ -318,14 +409,15 @@ function BoardView({ document, abilities, readOnly }: Props) {
     if (!over) {
       return;
     }
-    const activeCard = boardCards.get(active.id as string);
-    if (!activeCard) {
+    const draggedCard = boardCards.get(active.id as string);
+    if (!draggedCard) {
       return;
     }
 
     const overId = over.id.toString();
-    const overCard =
-      overId.startsWith("column-") ? null : boardCards.get(overId);
+    const overCard = overId.startsWith("column-")
+      ? null
+      : boardCards.get(overId);
     const targetColumnId =
       overCard?.columnId ??
       over.data?.current?.columnId ??
@@ -337,7 +429,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
 
     const targetCards = boardCards
       .inColumn(targetColumnId)
-      .filter((card) => card.id !== activeCard.id);
+      .filter((card) => card.id !== draggedCard.id);
     const insertionIndex = overCard
       ? targetCards.findIndex((c) => c.id === overCard.id)
       : targetCards.length;
@@ -347,7 +439,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
     const afterId = targetCards[insertionIndex]?.id;
 
     await boardCards.move({
-      id: activeCard.id,
+      id: draggedCard.id,
       columnId: targetColumnId,
       beforeId,
       afterId,
@@ -360,8 +452,8 @@ function BoardView({ document, abilities, readOnly }: Props) {
       title: card.title,
       description: card.description ?? "",
       tags: card.tags ?? [],
-      assigneeId: card.assigneeId,
-      metadata: card.metadata,
+      assigneeId: card.assigneeId ?? undefined,
+      metadata: card.metadata ?? undefined,
     });
   };
 
@@ -424,6 +516,36 @@ function BoardView({ document, abilities, readOnly }: Props) {
     await boardColumns.delete(column);
   };
 
+  const handleStartAddCard = (columnId: string) => {
+    setAddingCardColumnId(columnId);
+    // Focus input after render
+    setTimeout(() => {
+      addCardInputRef.current?.focus();
+    }, 0);
+  };
+
+  const handleCancelAddCard = () => {
+    setAddingCardColumnId(null);
+    setNewCardTitle((prev) => {
+      if (addingCardColumnId) {
+        return { ...prev, [addingCardColumnId]: "" };
+      }
+      return prev;
+    });
+  };
+
+  const handleAddCardKeyDown = (
+    e: React.KeyboardEvent,
+    column: BoardColumnModel
+  ) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleAddCard(column);
+    } else if (e.key === "Escape") {
+      handleCancelAddCard();
+    }
+  };
+
   if (isLoading || !boardId) {
     return (
       <LoadingWrap>
@@ -442,7 +564,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
   }
 
   return (
-    <BoardSurface auto hideScrollbars>
+    <BoardSurface flex hiddenScrollbars>
       <Header>
         <div>
           <Heading>{document.title}</Heading>
@@ -471,61 +593,75 @@ function BoardView({ document, abilities, readOnly }: Props) {
           )}
         </Flex>
       </Header>
-      <DndContext sensors={sensors} onDragEnd={handleCardMove}>
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleCardMove}
+      >
         <Columns>
-          {columns.map((column) => {
+          {columns.map((column, columnIndex) => {
             const cards = boardCards.inColumn(column.id);
             const isEditing = editingColumnId === column.id;
+            const isAddingCard = addingCardColumnId === column.id;
+            const columnColor =
+              column.color || DEFAULT_COLUMN_COLORS[columnIndex % DEFAULT_COLUMN_COLORS.length];
             return (
               <Column key={column.id}>
+                <ColumnColorBar $color={columnColor} />
                 <ColumnHeader>
-                  {isEditing ? (
-                    <ColumnTitleInput
-                      value={editingColumnTitle}
-                      onChange={(ev) => setEditingColumnTitle(ev.target.value)}
-                      onBlur={handleSaveColumnTitle}
-                      onKeyDown={(ev) => {
-                        if (ev.key === "Enter") {
-                          handleSaveColumnTitle();
-                        } else if (ev.key === "Escape") {
-                          setEditingColumnId(null);
+                  <ColumnHeaderLeft>
+                    {isEditing ? (
+                      <ColumnTitleInput
+                        value={editingColumnTitle}
+                        onChange={(ev) =>
+                          setEditingColumnTitle(ev.target.value)
                         }
-                      }}
-                      autoFocus
-                    />
-                  ) : (
-                    <ColumnTitleRow>
-                      <Text weight="bold">{column.title}</Text>
-                      {!readOnly && (
-                        <ColumnActions>
-                          <ColumnActionButton
-                            onClick={() => handleEditColumn(column)}
-                            title="Edit column"
-                          >
-                            <EditIcon size={16} />
-                          </ColumnActionButton>
-                          {columns.length > 1 && (
-                            <ColumnActionButton
-                              onClick={() => {
-                                if (
-                                  window.confirm(
-                                    `確定要刪除「${column.title}」嗎？該分類中的卡片將移轉到第一個分類。`
-                                  )
-                                ) {
-                                  handleDeleteColumn(column);
-                                }
-                              }}
-                              title="Delete column"
-                              $danger
-                            >
-                              <TrashIcon size={16} />
-                            </ColumnActionButton>
-                          )}
-                        </ColumnActions>
+                        onBlur={handleSaveColumnTitle}
+                        onKeyDown={(ev) => {
+                          if (ev.key === "Enter") {
+                            handleSaveColumnTitle();
+                          } else if (ev.key === "Escape") {
+                            setEditingColumnId(null);
+                          }
+                        }}
+                        autoFocus
+                      />
+                    ) : (
+                      <ColumnTitleRow>
+                        <ColumnTitle>{column.title}</ColumnTitle>
+                        <ColumnBadge $color={columnColor}>
+                          {cards.length}
+                        </ColumnBadge>
+                      </ColumnTitleRow>
+                    )}
+                  </ColumnHeaderLeft>
+                  {!readOnly && !isEditing && (
+                    <ColumnActions>
+                      <ColumnActionButton
+                        onClick={() => handleEditColumn(column)}
+                        title="Edit column"
+                      >
+                        <EditIcon size={16} />
+                      </ColumnActionButton>
+                      {columns.length > 1 && (
+                        <ColumnActionButton
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `確定要刪除「${column.title}」嗎？該分類中的卡片將移轉到第一個分類。`
+                              )
+                            ) {
+                              void handleDeleteColumn(column);
+                            }
+                          }}
+                          title="Delete column"
+                          $danger
+                        >
+                          <TrashIcon size={16} />
+                        </ColumnActionButton>
                       )}
-                    </ColumnTitleRow>
+                    </ColumnActions>
                   )}
-                  <Count>{cards.length}</Count>
                 </ColumnHeader>
                 <SortableContext
                   items={cards.map((card) => card.id)}
@@ -542,70 +678,110 @@ function BoardView({ document, abilities, readOnly }: Props) {
                   </ColumnDroppable>
                 </SortableContext>
                 {!readOnly && (
-                  <AddCardRow>
-                    <Input
-                      placeholder="New task"
-                      value={newCardTitle[column.id] ?? ""}
-                      onChange={(ev) =>
-                        setNewCardTitle((prev) => ({
-                          ...prev,
-                          [column.id]: ev.target.value,
-                        }))
-                      }
-                    />
-                    <Button
-                      onClick={() => handleAddCard(column)}
-                      disabled={!newCardTitle[column.id]?.trim()}
-                      neutral
-                    >
-                      Add
-                    </Button>
-                  </AddCardRow>
+                  <AddCardArea>
+                    {isAddingCard ? (
+                      <AddCardForm>
+                        <AddCardInput
+                          ref={
+                            addingCardColumnId === column.id
+                              ? addCardInputRef
+                              : null
+                          }
+                          placeholder="Enter task title..."
+                          value={newCardTitle[column.id] ?? ""}
+                          onChange={(ev) =>
+                            setNewCardTitle((prev) => ({
+                              ...prev,
+                              [column.id]: ev.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) => handleAddCardKeyDown(e, column)}
+                          autoFocus
+                        />
+                        <AddCardActions>
+                          <Button
+                            onClick={() => void handleAddCard(column)}
+                            disabled={!newCardTitle[column.id]?.trim()}
+                          >
+                            Add
+                          </Button>
+                          <Button neutral onClick={handleCancelAddCard}>
+                            Cancel
+                          </Button>
+                        </AddCardActions>
+                      </AddCardForm>
+                    ) : (
+                      <AddCardButton
+                        onClick={() => handleStartAddCard(column.id)}
+                      >
+                        <PlusIcon size={16} />
+                        <span>Add card</span>
+                      </AddCardButton>
+                    )}
+                  </AddCardArea>
                 )}
               </Column>
             );
           })}
         </Columns>
+        <DragOverlay dropAnimation={{
+          duration: 200,
+          easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+        }}>
+          {activeCard && <CardPreview card={activeCard} />}
+        </DragOverlay>
       </DndContext>
 
       <Modal
         isOpen={!!selectedCard}
-        title={selectedCard?.title}
         onRequestClose={() => setSelectedCard(null)}
       >
         {selectedCard && (
-          <Flex column gap={12}>
-            <Input
-              label="Title"
-              value={selectedCard.title}
-              onChange={(ev) => (selectedCard.title = ev.target.value)}
-            />
-            <Input
-              label="Description"
-              type="textarea"
-              value={selectedCard.description ?? ""}
-              onChange={(ev) => (selectedCard.description = ev.target.value)}
-            />
-            <TagEditor
-              value={selectedCard.tags}
-              onChange={(tags) => (selectedCard.tags = tags)}
-            />
-            <UserSelector
-              value={selectedCard.assigneeId}
-              onChange={handleSelectAssignee}
-              users={users.orderedData}
-            />
+          <ModalContent>
+            <ModalMain>
+              <ModalTitleInput
+                value={selectedCard.title}
+                onChange={(ev) => (selectedCard.title = ev.target.value)}
+                placeholder="Card title"
+              />
+              <ModalDescriptionArea
+                value={selectedCard.description ?? ""}
+                onChange={(ev) => (selectedCard.description = ev.target.value)}
+                placeholder="Add a description..."
+                rows={6}
+              />
+            </ModalMain>
+            <ModalSidebar>
+              <PropertySection>
+                <PropertyLabel>Assignee</PropertyLabel>
+                <UserSelector
+                  value={selectedCard.assigneeId}
+                  onChange={handleSelectAssignee}
+                  users={users.orderedData}
+                />
+              </PropertySection>
+              <PropertySection>
+                <PropertyLabel>Tags</PropertyLabel>
+                <TagEditor
+                  value={selectedCard.tags}
+                  onChange={(tags) => (selectedCard.tags = tags)}
+                />
+              </PropertySection>
+            </ModalSidebar>
             {!readOnly && (
-              <Flex gap={8}>
-                <Button onClick={() => handleSaveCard(selectedCard)}>
-                  Save
+              <ModalFooter>
+                <Button onClick={() => void handleSaveCard(selectedCard)}>
+                  Save changes
                 </Button>
-                <Button onClick={() => handleDeleteCard(selectedCard)} neutral>
-                  Delete
+                <Button
+                  onClick={() => void handleDeleteCard(selectedCard)}
+                  danger
+                >
+                  Delete card
                 </Button>
-              </Flex>
+              </ModalFooter>
             )}
-          </Flex>
+          </ModalContent>
         )}
       </Modal>
     </BoardSurface>
@@ -613,6 +789,17 @@ function BoardView({ document, abilities, readOnly }: Props) {
 }
 
 export default observer(BoardView);
+
+// Animations
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const scaleIn = keyframes`
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+`;
 
 const Header = styled(Flex)`
   padding: 16px 24px;
@@ -623,41 +810,67 @@ const Header = styled(Flex)`
 
 const Columns = styled.div`
   display: flex;
-  gap: 18px;
-  padding: 20px 28px 44px;
+  gap: 20px;
+  padding: 24px 28px 44px;
   overflow-x: auto;
 `;
 
 const Column = styled.div`
-  background: linear-gradient(
-      145deg,
-      ${s("background")} 0%,
-      ${s("backgroundSecondary")} 100%
-    ),
-    ${s("cardBackground")};
+  background: ${s("background")};
   border: 1px solid ${s("divider")};
-  border-radius: 14px;
+  border-radius: 12px;
   min-height: 240px;
-  min-width: 320px;
+  width: 300px;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  box-shadow:
-    0 14px 30px rgba(0, 0, 0, 0.08),
-    0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  animation: ${scaleIn} 200ms ease;
+`;
+
+const ColumnColorBar = styled.div<{ $color: string }>`
+  height: 3px;
+  background: ${(props) => props.$color};
+  flex-shrink: 0;
 `;
 
 const ColumnHeader = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 0 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid ${s("divider")};
+  background: ${s("backgroundSecondary")};
+`;
+
+const ColumnHeaderLeft = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 `;
 
 const ColumnTitleRow = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
+`;
+
+const ColumnTitle = styled.span`
+  font-weight: 600;
+  font-size: 14px;
+  color: ${s("text")};
+`;
+
+const ColumnBadge = styled.span<{ $color: string }>`
+  background: ${(props) => props.$color}20;
+  color: ${(props) => props.$color};
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
 `;
 
 const ColumnActions = styled.div`
@@ -673,18 +886,19 @@ const ColumnActions = styled.div`
 `;
 
 const ColumnActionButton = styled(NudeButton) <{ $danger?: boolean }>`
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   color: ${(props) => (props.$danger ? s("danger") : s("textSecondary"))};
 
   &:hover {
     color: ${(props) => (props.$danger ? s("danger") : s("text"))};
-    background: ${s("secondaryBackground")};
+    background: ${s("backgroundSecondary")};
   }
 `;
 
 const ColumnTitleInput = styled.input`
-  border: 1px solid ${s("inputBorder")};
+  border: 1px solid ${s("accent")};
   border-radius: 4px;
   padding: 4px 8px;
   font-size: 14px;
@@ -695,82 +909,172 @@ const ColumnTitleInput = styled.input`
   width: 150px;
 
   &:focus {
-    border-color: ${s("accent")};
+    box-shadow: 0 0 0 2px ${s("accent")}30;
   }
 `;
 
 const CardsArea = styled.div<{ $isOver?: boolean }>`
-  padding: 10px 14px 14px;
-  min-height: 140px;
-  border: 1px dashed
-    ${(props) => (props.$isOver ? s("accent") : "transparent")};
-  border-radius: 10px;
-  transition: border 120ms ease, background 120ms ease;
+  padding: 8px;
+  min-height: 100px;
+  flex: 1;
+  border: 2px dashed ${(props) => (props.$isOver ? s("accent") : "transparent")};
+  border-radius: 8px;
+  margin: 8px;
+  transition: all 150ms ease;
   background: ${(props) =>
-    props.$isOver ? "rgba(255,255,255,0.03)" : "transparent"};
-  backdrop-filter: blur(4px);
+    props.$isOver ? `${s("accent")}10` : "transparent"};
 `;
 
-const CardShell = styled.div`
-  padding: 14px;
-  margin-bottom: 10px;
+const CardShell = styled.div<{ $isDragging?: boolean; $isDragOverlay?: boolean }>`
+  padding: 12px;
+  margin-bottom: 8px;
   cursor: grab;
-  background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.02),
-      rgba(255, 255, 255, 0)
-    ),
-    ${s("cardBackground")};
+  background: ${s("background")};
   border: 1px solid ${s("divider")};
-  border-radius: 12px;
-  box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.08),
-    0 1px 0 rgba(255, 255, 255, 0.04);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 150ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  ${(props) =>
+    props.$isDragging &&
+    css`
+      opacity: 0.4;
+      border: 1px dashed ${s("accent")};
+      background: ${s("backgroundSecondary")};
+    `}
+
+  ${(props) =>
+    props.$isDragOverlay &&
+    css`
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      transform: rotate(2deg);
+      cursor: grabbing;
+    `}
 
   &:hover {
-    transform: translateY(-2px);
-    box-shadow:
-      0 18px 36px rgba(0, 0, 0, 0.12),
-      0 1px 0 rgba(255, 255, 255, 0.05);
+    border-color: ${s("accent")}50;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &:last-child {
+    margin-bottom: 0;
   }
 `;
 
-const Count = styled.span`
-  background: ${s("accent")};
-  color: ${s("accentText")};
-  border-radius: 10px;
-  padding: 2px 10px;
-  font-size: 12px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
-`;
-
-const AddCardRow = styled(Flex)`
-  padding: 0 12px 12px;
-  gap: 8px;
-`;
-
-const TagRow = styled.div`
+const CardContent = styled.div`
   display: flex;
+  flex-direction: column;
   gap: 6px;
-  margin-top: 6px;
-  flex-wrap: wrap;
 `;
 
-const Tag = styled.span<{ $color?: string | null }>`
-  padding: 2px 10px;
-  border-radius: 12px;
-  background: ${(props) =>
-    props.$color ? props.$color : s("backgroundSecondary")};
+const CardTitle = styled.span`
+  font-weight: 500;
+  font-size: 14px;
   color: ${s("text")};
-  font-size: 12px;
-  border: 1px solid ${s("divider")};
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  line-height: 1.4;
 `;
 
-const MetaLine = styled(Text)`
-  margin-top: 6px;
+const CardDescription = styled.span`
+  font-size: 13px;
   color: ${s("textSecondary")};
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+`;
+
+const CardTagRow = styled.div`
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+`;
+
+const CardTag = styled.span<{ $color?: string | null }>`
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: ${(props) => (props.$color ? `${props.$color}20` : s("backgroundSecondary"))};
+  color: ${(props) => (props.$color ? props.$color : s("textSecondary"))};
+  font-size: 11px;
+  font-weight: 500;
+`;
+
+const CardTagMore = styled.span`
+  padding: 2px 6px;
+  font-size: 11px;
+  color: ${s("textSecondary")};
+`;
+
+const CardFooter = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-top: 4px;
+  border-top: 1px solid ${s("divider")};
+`;
+
+const AddCardArea = styled.div`
+  padding: 8px 12px 12px;
+`;
+
+const AddCardButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: ${s("textSecondary")};
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 150ms ease;
+
+  &:hover {
+    background: ${s("backgroundSecondary")};
+    color: ${s("text")};
+  }
+`;
+
+const AddCardForm = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: ${fadeIn} 150ms ease;
+`;
+
+const AddCardInput = styled.input`
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid ${s("inputBorder")};
+  border-radius: 6px;
+  background: ${s("background")};
+  color: ${s("text")};
+  font-size: 14px;
+  outline: none;
+
+  &:focus {
+    border-color: ${s("accent")};
+    box-shadow: 0 0 0 2px ${s("accent")}20;
+  }
+
+  &::placeholder {
+    color: ${s("textTertiary")};
+  }
+`;
+
+const AddCardActions = styled.div`
+  display: flex;
+  gap: 8px;
 `;
 
 const LoadingWrap = styled(Flex)`
@@ -780,21 +1084,108 @@ const LoadingWrap = styled(Flex)`
 `;
 
 const BoardSurface = styled(Scrollable)`
-  background: radial-gradient(
-      circle at 20% 20%,
-      rgba(255, 255, 255, 0.04),
-      transparent 32%
-    ),
-    radial-gradient(
-      circle at 80% 10%,
-      rgba(255, 255, 255, 0.03),
-      transparent 28%
-    ),
-    linear-gradient(
-      135deg,
-      ${s("background")} 0%,
-      ${s("backgroundSecondary")} 100%
-    );
+  background: ${s("backgroundSecondary")};
+`;
+
+// Modal styles
+const ModalContent = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  grid-template-rows: 1fr auto;
+  gap: 24px;
+  min-height: 300px;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const ModalMain = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const ModalTitleInput = styled.input`
+  width: 100%;
+  padding: 8px 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: ${s("text")};
+  font-size: 20px;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 150ms ease;
+
+  &:focus {
+    border-bottom-color: ${s("accent")};
+  }
+
+  &::placeholder {
+    color: ${s("textTertiary")};
+  }
+`;
+
+const ModalDescriptionArea = styled.textarea`
+  width: 100%;
+  padding: 12px;
+  border: 1px solid ${s("inputBorder")};
+  border-radius: 8px;
+  background: ${s("backgroundSecondary")};
+  color: ${s("text")};
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  min-height: 120px;
+
+  &:focus {
+    border-color: ${s("accent")};
+    box-shadow: 0 0 0 2px ${s("accent")}20;
+  }
+
+  &::placeholder {
+    color: ${s("textTertiary")};
+  }
+`;
+
+const ModalSidebar = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-left: 24px;
+  border-left: 1px solid ${s("divider")};
+
+  @media (max-width: 640px) {
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid ${s("divider")};
+    padding-top: 20px;
+  }
+`;
+
+const PropertySection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const PropertyLabel = styled.label`
+  font-size: 12px;
+  font-weight: 600;
+  color: ${s("textSecondary")};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const ModalFooter = styled.div`
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid ${s("divider")};
 `;
 
 // User selector styles
@@ -802,27 +1193,20 @@ const UserSelectorWrapper = styled.div`
   position: relative;
 `;
 
-const UserSelectorLabel = styled.label`
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: ${s("text")};
-  margin-bottom: 4px;
-`;
-
 const UserSelectorTrigger = styled.button`
   width: 100%;
   padding: 8px 12px;
   border: 1px solid ${s("inputBorder")};
-  border-radius: 4px;
+  border-radius: 6px;
   background: ${s("background")};
   color: ${s("text")};
   cursor: pointer;
   text-align: left;
-  font-size: 14px;
+  font-size: 13px;
+  transition: all 150ms ease;
 
   &:hover {
-    border-color: ${s("inputBorderFocused")};
+    border-color: ${s("accent")}50;
   }
 `;
 
@@ -835,45 +1219,45 @@ const UserDropdown = styled.div`
   background: ${s("menuBackground")};
   border: 1px solid ${s("inputBorder")};
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   z-index: 100;
-  max-height: 300px;
+  max-height: 280px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  animation: ${fadeIn} 150ms ease;
 `;
 
 const UserSearchInput = styled.input`
-  padding: 12px;
+  padding: 10px 12px;
   border: none;
   border-bottom: 1px solid ${s("divider")};
   background: transparent;
   color: ${s("text")};
-  font-size: 14px;
+  font-size: 13px;
   outline: none;
 
   &::placeholder {
-    color: ${s("textSecondary")};
+    color: ${s("textTertiary")};
   }
 `;
 
 const UserList = styled.div`
   overflow-y: auto;
-  max-height: 250px;
+  max-height: 220px;
 `;
 
 const UserOption = styled.div<{ $selected?: boolean }>`
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 8px 12px;
   cursor: pointer;
-  background: ${(props) =>
-    props.$selected ? s("accent") : "transparent"};
-  color: ${(props) => (props.$selected ? s("accentText") : s("text"))};
+  transition: background 100ms ease;
+  background: ${(props) => (props.$selected ? `${s("accent")}15` : "transparent")};
 
   &:hover {
     background: ${(props) =>
-    props.$selected ? s("accent") : s("secondaryBackground")};
+    props.$selected ? `${s("accent")}20` : s("backgroundSecondary")};
   }
 `;
