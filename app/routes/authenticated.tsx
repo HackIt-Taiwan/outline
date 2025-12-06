@@ -29,6 +29,7 @@ const Drafts = lazy(() => import("~/scenes/Drafts"));
 const Home = lazy(() => import("~/scenes/Home"));
 const Search = lazy(() => import("~/scenes/Search"));
 const Trash = lazy(() => import("~/scenes/Trash"));
+const Kanban = lazy(() => import("~/scenes/Kanban"));
 
 const RedirectDocument = ({
   match,
@@ -87,6 +88,7 @@ function AuthenticatedRoutes() {
                 component={Collection}
               />
               <Route exact path="/doc/new" component={DocumentNew} />
+              <Route exact path="/kanban/:documentSlug" component={Kanban} />
               <Route exact path={`/d/${slug}`} component={RedirectDocument} />
               <Route
                 exact

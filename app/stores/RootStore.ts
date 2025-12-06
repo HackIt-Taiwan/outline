@@ -33,6 +33,9 @@ import UserMembershipsStore from "./UserMembershipsStore";
 import UsersStore from "./UsersStore";
 import ViewsStore from "./ViewsStore";
 import WebhookSubscriptionsStore from "./WebhookSubscriptionStore";
+import BoardsStore from "./BoardsStore";
+import BoardColumnsStore from "./BoardColumnsStore";
+import BoardCardsStore from "./BoardCardsStore";
 import Store from "./base/Store";
 
 export default class RootStore {
@@ -68,6 +71,9 @@ export default class RootStore {
   fileOperations: FileOperationsStore;
   webhookSubscriptions: WebhookSubscriptionsStore;
   userMemberships: UserMembershipsStore;
+  boards: BoardsStore;
+  boardColumns: BoardColumnsStore;
+  boardCards: BoardCardsStore;
 
   constructor() {
     // Models
@@ -99,6 +105,9 @@ export default class RootStore {
     this.registerStore(FileOperationsStore);
     this.registerStore(WebhookSubscriptionsStore);
     this.registerStore(UserMembershipsStore);
+    this.registerStore(BoardsStore);
+    this.registerStore(BoardColumnsStore);
+    this.registerStore(BoardCardsStore);
 
     // Non-models
     this.registerStore(DocumentPresenceStore, "presence");

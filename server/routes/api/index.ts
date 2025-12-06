@@ -23,6 +23,7 @@ import fileOperationsRoute from "./fileOperations";
 import groupMemberships from "./groupMemberships";
 import groups from "./groups";
 import imports from "./imports";
+import boards from "./boards";
 import installation from "./installation";
 import integrations from "./integrations";
 import apiErrorHandler from "./middlewares/apiErrorHandler";
@@ -108,6 +109,7 @@ router.use("/", userMemberships.routes());
 router.use("/", reactions.routes());
 router.use("/", relationships.routes());
 router.use("/", imports.routes());
+router.use("/", boards.routes());
 
 if (!env.isCloudHosted) {
   router.use("/", installation.routes());

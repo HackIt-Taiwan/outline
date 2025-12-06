@@ -28,6 +28,9 @@ import presentSubscription from "./subscription";
 import presentTeam from "./team";
 import presentUser from "./user";
 import presentView from "./view";
+import presentBoard from "./board";
+import presentBoardColumn from "./boardColumn";
+import presentBoardCard from "./boardCard";
 
 export {
   presentApiKey,
@@ -61,4 +64,7 @@ export {
   presentTeam,
   presentUser,
   presentView,
+  presentBoard,
+  presentBoardColumn,
+  presentBoardCard,
 };

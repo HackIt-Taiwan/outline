@@ -67,3 +67,9 @@ export { default as WebhookSubscription } from "./WebhookSubscription";
 export { default as WebhookDelivery } from "./WebhookDelivery";
 
 export { default as Subscription } from "./Subscription";
+
+export { default as Board } from "./Board";
+
+export { default as BoardColumn } from "./BoardColumn";
+
+export { default as BoardCard } from "./BoardCard";

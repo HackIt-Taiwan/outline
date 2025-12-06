@@ -119,6 +119,12 @@ export enum IntegrationType {
   Import = "import",
 }
 
+export type BoardTag = {
+  id: string;
+  name: string;
+  color?: string | null;
+};
+
 export enum IntegrationService {
   Diagrams = "diagrams",
   Grist = "grist",
