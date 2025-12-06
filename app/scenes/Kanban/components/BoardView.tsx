@@ -15,7 +15,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { observer } from "mobx-react";
 import { EditIcon, TrashIcon, PlusIcon } from "outline-icons";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import styled, { css, keyframes } from "styled-components";
+import styled, { css } from "styled-components";
 import { BoardTag } from "@shared/types";
 import { Avatar, AvatarSize } from "~/components/Avatar";
 import Button from "~/components/Button";
@@ -41,17 +41,6 @@ const truncateText = (text: string, maxLength: number = 80) => {
   }
   return text.substring(0, maxLength).trim() + "...";
 };
-
-// Default column colors for visual variety
-const DEFAULT_COLUMN_COLORS = [
-  "#6366f1", // indigo
-  "#8b5cf6", // violet
-  "#06b6d4", // cyan
-  "#10b981", // emerald
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#ec4899", // pink
-];
 
 type Props = {
   document: Document;
@@ -599,15 +588,12 @@ function BoardView({ document, abilities, readOnly }: Props) {
         onDragEnd={handleCardMove}
       >
         <Columns>
-          {columns.map((column, columnIndex) => {
+          {columns.map((column) => {
             const cards = boardCards.inColumn(column.id);
             const isEditing = editingColumnId === column.id;
             const isAddingCard = addingCardColumnId === column.id;
-            const columnColor =
-              column.color || DEFAULT_COLUMN_COLORS[columnIndex % DEFAULT_COLUMN_COLORS.length];
             return (
               <Column key={column.id}>
-                <ColumnColorBar $color={columnColor} />
                 <ColumnHeader>
                   <ColumnHeaderLeft>
                     {isEditing ? (
@@ -629,9 +615,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
                     ) : (
                       <ColumnTitleRow>
                         <ColumnTitle>{column.title}</ColumnTitle>
-                        <ColumnBadge $color={columnColor}>
-                          {cards.length}
-                        </ColumnBadge>
+                        <ColumnBadge>{cards.length}</ColumnBadge>
                       </ColumnTitleRow>
                     )}
                   </ColumnHeaderLeft>
@@ -790,19 +774,8 @@ function BoardView({ document, abilities, readOnly }: Props) {
 
 export default observer(BoardView);
 
-// Animations
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-`;
-
-const scaleIn = keyframes`
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-`;
-
 const Header = styled(Flex)`
-  padding: 16px 24px;
+  padding: 12px 20px;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid ${s("divider")};
@@ -810,38 +783,26 @@ const Header = styled(Flex)`
 
 const Columns = styled.div`
   display: flex;
-  gap: 20px;
-  padding: 24px 28px 44px;
+  gap: 16px;
+  padding: 16px 20px 32px;
   overflow-x: auto;
 `;
 
 const Column = styled.div`
   background: ${s("background")};
-  border: 1px solid ${s("divider")};
-  border-radius: 12px;
-  min-height: 240px;
-  width: 300px;
-  min-width: 300px;
+  border-radius: 8px;
+  min-height: 200px;
+  width: 280px;
+  min-width: 280px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  overflow: hidden;
-  animation: ${scaleIn} 200ms ease;
-`;
-
-const ColumnColorBar = styled.div<{ $color: string }>`
-  height: 3px;
-  background: ${(props) => props.$color};
-  flex-shrink: 0;
 `;
 
 const ColumnHeader = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid ${s("divider")};
-  background: ${s("backgroundSecondary")};
+  padding: 10px 12px;
 `;
 
 const ColumnHeaderLeft = styled.div`
@@ -855,22 +816,18 @@ const ColumnHeaderLeft = styled.div`
 const ColumnTitleRow = styled.div`
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 `;
 
 const ColumnTitle = styled.span`
-  font-weight: 600;
-  font-size: 14px;
-  color: ${s("text")};
+  font-weight: 500;
+  font-size: 13px;
+  color: ${s("textSecondary")};
 `;
 
-const ColumnBadge = styled.span<{ $color: string }>`
-  background: ${(props) => props.$color}20;
-  color: ${(props) => props.$color};
-  border-radius: 10px;
-  padding: 2px 8px;
+const ColumnBadge = styled.span`
+  color: ${s("textTertiary")};
   font-size: 12px;
-  font-weight: 500;
 `;
 
 const ColumnActions = styled.div`
@@ -878,7 +835,7 @@ const ColumnActions = styled.div`
   align-items: center;
   gap: 2px;
   opacity: 0;
-  transition: opacity 150ms ease;
+  transition: opacity 100ms ease;
 
   ${ColumnHeader}:hover & {
     opacity: 1;
@@ -886,77 +843,64 @@ const ColumnActions = styled.div`
 `;
 
 const ColumnActionButton = styled(NudeButton) <{ $danger?: boolean }>`
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  color: ${(props) => (props.$danger ? s("danger") : s("textSecondary"))};
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: ${(props) => (props.$danger ? s("danger") : s("textTertiary"))};
 
   &:hover {
     color: ${(props) => (props.$danger ? s("danger") : s("text"))};
-    background: ${s("backgroundSecondary")};
   }
 `;
 
 const ColumnTitleInput = styled.input`
-  border: 1px solid ${s("accent")};
+  border: 1px solid ${s("inputBorder")};
   border-radius: 4px;
   padding: 4px 8px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   background: ${s("background")};
   color: ${s("text")};
   outline: none;
-  width: 150px;
+  width: 140px;
 
   &:focus {
-    box-shadow: 0 0 0 2px ${s("accent")}30;
+    border-color: ${s("accent")};
   }
 `;
 
 const CardsArea = styled.div<{ $isOver?: boolean }>`
-  padding: 8px;
-  min-height: 100px;
+  padding: 0 8px 8px;
+  min-height: 80px;
   flex: 1;
-  border: 2px dashed ${(props) => (props.$isOver ? s("accent") : "transparent")};
-  border-radius: 8px;
-  margin: 8px;
-  transition: all 150ms ease;
-  background: ${(props) =>
-    props.$isOver ? `${s("accent")}10` : "transparent"};
+  border-radius: 4px;
+  transition: background 100ms ease;
+  background: ${(props) => (props.$isOver ? `${s("accent")}08` : "transparent")};
 `;
 
 const CardShell = styled.div<{ $isDragging?: boolean; $isDragOverlay?: boolean }>`
-  padding: 12px;
-  margin-bottom: 8px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
   cursor: grab;
-  background: ${s("background")};
+  background: ${s("menuBackground")};
   border: 1px solid ${s("divider")};
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: all 150ms ease;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  border-radius: 6px;
+  transition: border-color 100ms ease;
 
   ${(props) =>
     props.$isDragging &&
     css`
-      opacity: 0.4;
-      border: 1px dashed ${s("accent")};
-      background: ${s("backgroundSecondary")};
+      opacity: 0.5;
     `}
 
   ${(props) =>
     props.$isDragOverlay &&
     css`
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-      transform: rotate(2deg);
-      cursor: grabbing;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     `}
 
   &:hover {
-    border-color: ${s("accent")}50;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border-color: ${s("inputBorderFocused")};
   }
 
   &:active {
@@ -971,19 +915,18 @@ const CardShell = styled.div<{ $isDragging?: boolean; $isDragOverlay?: boolean }
 const CardContent = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 `;
 
 const CardTitle = styled.span`
-  font-weight: 500;
-  font-size: 14px;
+  font-size: 13px;
   color: ${s("text")};
   line-height: 1.4;
 `;
 
 const CardDescription = styled.span`
-  font-size: 13px;
-  color: ${s("textSecondary")};
+  font-size: 12px;
+  color: ${s("textTertiary")};
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -999,72 +942,65 @@ const CardTagRow = styled.div`
 `;
 
 const CardTag = styled.span<{ $color?: string | null }>`
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: ${(props) => (props.$color ? `${props.$color}20` : s("backgroundSecondary"))};
-  color: ${(props) => (props.$color ? props.$color : s("textSecondary"))};
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: ${s("divider")};
+  color: ${s("textSecondary")};
   font-size: 11px;
-  font-weight: 500;
 `;
 
 const CardTagMore = styled.span`
-  padding: 2px 6px;
   font-size: 11px;
-  color: ${s("textSecondary")};
+  color: ${s("textTertiary")};
 `;
 
 const CardFooter = styled.div`
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding-top: 4px;
-  border-top: 1px solid ${s("divider")};
+  margin-top: 6px;
 `;
 
 const AddCardArea = styled.div`
-  padding: 8px 12px 12px;
+  padding: 4px 8px 8px;
 `;
 
 const AddCardButton = styled.button`
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
-  color: ${s("textSecondary")};
-  font-size: 13px;
+  color: ${s("textTertiary")};
+  font-size: 12px;
   cursor: pointer;
-  transition: all 150ms ease;
 
   &:hover {
-    background: ${s("backgroundSecondary")};
-    color: ${s("text")};
+    color: ${s("textSecondary")};
   }
 `;
 
 const AddCardForm = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  animation: ${fadeIn} 150ms ease;
+  gap: 6px;
 `;
 
 const AddCardInput = styled.input`
   width: 100%;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid ${s("inputBorder")};
-  border-radius: 6px;
-  background: ${s("background")};
+  border-radius: 4px;
+  background: ${s("menuBackground")};
   color: ${s("text")};
-  font-size: 14px;
+  font-size: 13px;
   outline: none;
 
   &:focus {
     border-color: ${s("accent")};
-    box-shadow: 0 0 0 2px ${s("accent")}20;
   }
 
   &::placeholder {
@@ -1074,7 +1010,7 @@ const AddCardInput = styled.input`
 
 const AddCardActions = styled.div`
   display: flex;
-  gap: 8px;
+  gap: 6px;
 `;
 
 const LoadingWrap = styled(Flex)`
@@ -1084,43 +1020,31 @@ const LoadingWrap = styled(Flex)`
 `;
 
 const BoardSurface = styled(Scrollable)`
-  background: ${s("backgroundSecondary")};
+  background: ${s("sidebarBackground")};
 `;
 
 // Modal styles
 const ModalContent = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 240px;
-  grid-template-rows: 1fr auto;
-  gap: 24px;
-  min-height: 300px;
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const ModalMain = styled.div`
   display: flex;
   flex-direction: column;
   gap: 16px;
 `;
 
+const ModalMain = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
 const ModalTitleInput = styled.input`
   width: 100%;
-  padding: 8px 0;
+  padding: 4px 0;
   border: none;
-  border-bottom: 2px solid transparent;
   background: transparent;
   color: ${s("text")};
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 500;
   outline: none;
-  transition: border-color 150ms ease;
-
-  &:focus {
-    border-bottom-color: ${s("accent")};
-  }
 
   &::placeholder {
     color: ${s("textTertiary")};
@@ -1129,20 +1053,19 @@ const ModalTitleInput = styled.input`
 
 const ModalDescriptionArea = styled.textarea`
   width: 100%;
-  padding: 12px;
+  padding: 8px;
   border: 1px solid ${s("inputBorder")};
-  border-radius: 8px;
-  background: ${s("backgroundSecondary")};
+  border-radius: 4px;
+  background: transparent;
   color: ${s("text")};
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.5;
   resize: vertical;
   outline: none;
-  min-height: 120px;
+  min-height: 80px;
 
   &:focus {
     border-color: ${s("accent")};
-    box-shadow: 0 0 0 2px ${s("accent")}20;
   }
 
   &::placeholder {
@@ -1153,38 +1076,29 @@ const ModalDescriptionArea = styled.textarea`
 const ModalSidebar = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding-left: 24px;
-  border-left: 1px solid ${s("divider")};
-
-  @media (max-width: 640px) {
-    padding-left: 0;
-    border-left: none;
-    border-top: 1px solid ${s("divider")};
-    padding-top: 20px;
-  }
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid ${s("divider")};
 `;
 
 const PropertySection = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 `;
 
 const PropertyLabel = styled.label`
-  font-size: 12px;
-  font-weight: 600;
-  color: ${s("textSecondary")};
+  font-size: 11px;
+  font-weight: 500;
+  color: ${s("textTertiary")};
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 `;
 
 const ModalFooter = styled.div`
-  grid-column: 1 / -1;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid ${s("divider")};
 `;
 
@@ -1195,18 +1109,17 @@ const UserSelectorWrapper = styled.div`
 
 const UserSelectorTrigger = styled.button`
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 8px;
   border: 1px solid ${s("inputBorder")};
-  border-radius: 6px;
-  background: ${s("background")};
+  border-radius: 4px;
+  background: transparent;
   color: ${s("text")};
   cursor: pointer;
   text-align: left;
-  font-size: 13px;
-  transition: all 150ms ease;
+  font-size: 12px;
 
   &:hover {
-    border-color: ${s("accent")}50;
+    border-color: ${s("inputBorderFocused")};
   }
 `;
 
@@ -1218,23 +1131,22 @@ const UserDropdown = styled.div`
   margin-top: 4px;
   background: ${s("menuBackground")};
   border: 1px solid ${s("inputBorder")};
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  box-shadow: ${s("menuShadow")};
   z-index: 100;
-  max-height: 280px;
+  max-height: 240px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  animation: ${fadeIn} 150ms ease;
 `;
 
 const UserSearchInput = styled.input`
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: none;
   border-bottom: 1px solid ${s("divider")};
   background: transparent;
   color: ${s("text")};
-  font-size: 13px;
+  font-size: 12px;
   outline: none;
 
   &::placeholder {
@@ -1244,20 +1156,18 @@ const UserSearchInput = styled.input`
 
 const UserList = styled.div`
   overflow-y: auto;
-  max-height: 220px;
+  max-height: 200px;
 `;
 
 const UserOption = styled.div<{ $selected?: boolean }>`
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 6px 10px;
   cursor: pointer;
-  transition: background 100ms ease;
-  background: ${(props) => (props.$selected ? `${s("accent")}15` : "transparent")};
+  background: ${(props) => (props.$selected ? s("menuItemSelected") : "transparent")};
 
   &:hover {
-    background: ${(props) =>
-    props.$selected ? `${s("accent")}20` : s("backgroundSecondary")};
+    background: ${s("listItemHoverBackground")};
   }
 `;
