@@ -33,6 +33,7 @@ import {
   deleteDocument,
   leaveDocument,
   permanentlyDeleteDocument,
+  enableKanban,
 } from "~/actions/definitions/documents";
 import { ActiveDocumentSection } from "~/actions/sections";
 import useMobile from "./useMobile";
@@ -106,6 +107,7 @@ export function useDocumentMenuAction({
       applyTemplateFactory({ actions: templateMenuActions }),
       pinDocument,
       createDocumentFromTemplate,
+      enableKanban,
       ActionV2Separator,
       openDocumentComments,
       openDocumentHistory,

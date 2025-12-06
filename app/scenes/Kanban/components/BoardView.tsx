@@ -234,7 +234,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
   };
 
   const handleSaveCard = async (card: BoardCardModel) => {
-    await boardCards.update({
+    await boardCards.updateCard({
       id: card.id,
       title: card.title,
       description: card.description ?? "",
@@ -253,9 +253,9 @@ function BoardView({ document, abilities, readOnly }: Props) {
     setSelectedCard((prev) =>
       prev
         ? Object.assign(
-            prev,
-            { assigneeId: userId, assignee: userId ? users.get(userId) : null } // mutate observable
-          )
+          prev,
+          { assigneeId: userId, assignee: userId ? users.get(userId) : null } // mutate observable
+        )
         : null
     );
   };
@@ -263,7 +263,16 @@ function BoardView({ document, abilities, readOnly }: Props) {
   if (isLoading || !boardId) {
     return (
       <LoadingWrap>
-        {loadError ? <Text type="danger">{loadError}</Text> : <LoadingIndicator />}
+        {loadError ? (
+          <Flex column gap={12} align="center">
+            <Text type="danger">{loadError}</Text>
+            <Button onClick={() => (window.location.href = document.url)}>
+              返回文件
+            </Button>
+          </Flex>
+        ) : (
+          <LoadingIndicator />
+        )}
       </LoadingWrap>
     );
   }

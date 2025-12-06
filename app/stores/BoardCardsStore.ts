@@ -1,10 +1,12 @@
 import { action, computed, runInAction } from "mobx";
 import invariant from "invariant";
+import fractionalIndex from "fractional-index";
 import BoardCard from "~/models/BoardCard";
 import { client } from "~/utils/ApiClient";
 import { RPCAction } from "./base/Store";
 import RootStore from "./RootStore";
 import Store from "./base/Store";
+import { BoardTag } from "@shared/types";
 
 export default class BoardCardsStore extends Store<BoardCard> {
   actions = [
@@ -32,9 +34,8 @@ export default class BoardCardsStore extends Store<BoardCard> {
 
   @action
   removeByDocument(documentId: string) {
-    this.filter((card) => card.documentId === documentId).forEach((card) =>
-      this.remove(card.id)
-    );
+    const cards = this.orderedData.filter((card) => card.documentId === documentId);
+    cards.forEach((card) => this.remove(card.id));
   }
 
   @action
@@ -49,17 +50,118 @@ export default class BoardCardsStore extends Store<BoardCard> {
     beforeId?: string;
     afterId?: string;
   }) {
-    const res = await client.post("/boardCards.move", {
-      id,
-      columnId,
-      beforeId,
-      afterId,
-    });
-    invariant(res?.data, "Card data missing");
+    const card = this.get(id);
+    if (!card) {
+      return;
+    }
+
+    // Save previous state for rollback
+    const previousColumnId = card.columnId;
+    const previousIndex = card.index;
+
+    // Optimistic update: calculate new index and update immediately
+    const beforeCard = beforeId ? this.get(beforeId) : undefined;
+    const afterCard = afterId ? this.get(afterId) : undefined;
+    const newIndex = fractionalIndex(
+      beforeCard?.index ?? null,
+      afterCard?.index ?? null
+    );
+
     runInAction(() => {
-      this.add(res.data);
-      this.addPolicies(res.policies);
+      card.columnId = columnId;
+      card.index = newIndex;
     });
-    return this.data.get(res.data.id);
+
+    try {
+      const res = await client.post("/boardCards.move", {
+        id,
+        columnId,
+        beforeId,
+        afterId,
+      });
+      invariant(res?.data, "Card data missing");
+      runInAction(() => {
+        this.add(res.data);
+        this.addPolicies(res.policies);
+      });
+      return this.data.get(res.data.id);
+    } catch (err) {
+      // Rollback on error
+      runInAction(() => {
+        card.columnId = previousColumnId;
+        card.index = previousIndex;
+      });
+      throw err;
+    }
+  }
+
+  @action
+  async updateCard(params: {
+    id: string;
+    title?: string;
+    description?: string;
+    tags?: BoardTag[];
+    assigneeId?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    const card = this.get(params.id);
+    if (!card) {
+      throw new Error("Card not found");
+    }
+
+    // Save previous state for rollback
+    const previousState = {
+      title: card.title,
+      description: card.description,
+      tags: card.tags,
+      assigneeId: card.assigneeId,
+      metadata: card.metadata,
+    };
+
+    // Optimistic update
+    runInAction(() => {
+      if (params.title !== undefined) {
+        card.title = params.title;
+      }
+      if (params.description !== undefined) {
+        card.description = params.description;
+      }
+      if (params.tags !== undefined) {
+        card.tags = params.tags;
+      }
+      if (params.assigneeId !== undefined) {
+        card.assigneeId = params.assigneeId;
+      }
+      if (params.metadata !== undefined) {
+        card.metadata = params.metadata;
+      }
+    });
+
+    try {
+      const res = await client.post("/boardCards.update", {
+        id: params.id,
+        title: params.title,
+        description: params.description,
+        tags: params.tags,
+        assigneeId: params.assigneeId,
+        metadata: params.metadata as Record<string, string | number | boolean | null> | undefined,
+      });
+      invariant(res?.data, "Card data missing");
+      runInAction(() => {
+        this.add(res.data);
+        this.addPolicies(res.policies);
+      });
+      return this.data.get(res.data.id);
+    } catch (err) {
+      // Rollback on error
+      runInAction(() => {
+        card.title = previousState.title;
+        card.description = previousState.description;
+        card.tags = previousState.tags;
+        card.assigneeId = previousState.assigneeId;
+        card.metadata = previousState.metadata;
+      });
+      throw err;
+    }
   }
 }

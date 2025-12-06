@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 import { TableOfContentsIcon, EditIcon } from "outline-icons";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useHistory } from "react-router-dom";
 import styled, { useTheme } from "styled-components";
@@ -40,7 +40,6 @@ import ObservingBanner from "./ObservingBanner";
 import PublicBreadcrumb from "./PublicBreadcrumb";
 import ShareButton from "./ShareButton";
 import { AppearanceAction } from "~/components/Sharing/components/Actions";
-import { client } from "~/utils/ApiClient";
 
 type Props = {
   document: Document;
@@ -89,11 +88,23 @@ function DocumentHeader({
   const [measureRef, size] = useMeasure();
   const isMobile = isMobileMedia || size.width < 700;
   const isShare = !!shareId;
+  const can = usePolicy(document);
 
   // We cache this value for as long as the component is mounted so that if you
   // apply a template there is still the option to replace it until the user
   // navigates away from the doc
   const [isNew] = useState(document.isPersistedOnce);
+  const [hasBoard, setHasBoard] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!can.update) {
+      return;
+    }
+    void (async () => {
+      const board = await ui.rootStore.boards.checkEnabled(document.id);
+      setHasBoard(!!board);
+    })();
+  }, [can.update, document.id, ui.rootStore.boards]);
 
   const handleSave = useCallback(() => {
     onSave({
@@ -110,7 +121,6 @@ function DocumentHeader({
     }
   }, [ui, isShare]);
 
-  const can = usePolicy(document);
   const { isDeleted, isTemplate } = document;
   const isTemplateEditable = can.update && isTemplate;
   const canToggleEmbeds = team?.documentEmbeds;
@@ -268,23 +278,11 @@ function DocumentHeader({
                 <ShareButton document={document} />
               </Action>
             )}
-            {!isEditing && !isRevision && can.update && (
+            {!isEditing && !isRevision && can.update && hasBoard && (
               <Action>
                 <Button
                   neutral
-                  onClick={async () => {
-                    if (
-                      !window.confirm(
-                        t(
-                          "啟用看板後，預設將以看板呈現此內容，可再從右上切換回文件。確認啟用？"
-                        )
-                      )
-                    ) {
-                      return;
-                    }
-                    await client.post("/boards.enable", {
-                      documentId: document.id,
-                    });
+                  onClick={() => {
                     const slug = document.url.split("/").pop();
                     history.push(`/kanban/${slug}`);
                   }}
@@ -368,7 +366,7 @@ function DocumentHeader({
   );
 }
 
-const StyledHeader = styled(Header)<{ $hidden: boolean }>`
+const StyledHeader = styled(Header) <{ $hidden: boolean }>`
   transition: opacity 500ms ease-in-out;
   ${(props) => props.$hidden && "opacity: 0;"}
 `;

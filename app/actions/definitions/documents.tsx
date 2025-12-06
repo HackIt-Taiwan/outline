@@ -1405,6 +1405,48 @@ export const leaveDocument = createActionV2({
   },
 });
 
+export const enableKanban = createActionV2({
+  name: ({ t }) => t("啟用看板"),
+  analyticsName: "Enable kanban",
+  section: ActiveDocumentSection,
+  icon: <ShapesIcon />,
+  visible: ({ activeDocumentId, stores }) => {
+    if (!activeDocumentId) {
+      return false;
+    }
+    const can = stores.policies.abilities(activeDocumentId);
+    // Only show if user can update and board is not enabled
+    const board = stores.boards.data.get(activeDocumentId);
+    return can.update && !board;
+  },
+  perform: async ({ activeDocumentId, stores, t }) => {
+    if (!activeDocumentId) {
+      return;
+    }
+
+    const document = stores.documents.get(activeDocumentId);
+    if (!document) {
+      return;
+    }
+
+    try {
+      await stores.boards.checkEnabled(activeDocumentId);
+      // If board already exists, just navigate
+      const slug = document.url.split("/").pop();
+      history.push(`/kanban/${slug}`);
+    } catch {
+      // Board doesn't exist, create it
+      const { client } = await import("~/utils/ApiClient");
+      await client.post("/boards.enable", {
+        documentId: activeDocumentId,
+      });
+      toast.success(t("看板已啟用"));
+      const slug = document.url.split("/").pop();
+      history.push(`/kanban/${slug}`);
+    }
+  },
+});
+
 export const applyTemplateFactory = ({
   actions,
 }: {
