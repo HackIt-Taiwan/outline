@@ -10,9 +10,11 @@ import Model from "./base/Model";
 class BoardCard extends Model {
   static modelName = "BoardCard";
 
+  @observable
   @Field
   boardId: string;
 
+  @observable
   @Field
   columnId: string;
 

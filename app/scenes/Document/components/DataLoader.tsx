@@ -59,11 +59,12 @@ type Props = RouteComponentProps<Params, StaticContext, LocationState> & {
 };
 
 function DataLoader({ match, children }: Props) {
-  const { ui, views, shares, comments, documents, revisions } = useStores();
+  const { ui, views, shares, comments, documents, revisions, boards } = useStores();
   const team = useCurrentTeam();
   const user = useCurrentUser();
   const { setDocument } = useDocumentContext();
   const [error, setError] = React.useState<Error | null>(null);
+  const [boardChecked, setBoardChecked] = React.useState(false);
   const { revisionId, documentSlug } = match.params;
 
   // Allows loading by /doc/slug-<urlId> or /doc/<id>
@@ -75,10 +76,10 @@ function DataLoader({ match, children }: Props) {
 
   const revision = revisionId
     ? revisions.get(
-        revisionId === "latest"
-          ? RevisionHelper.latestId(document?.id)
-          : revisionId
-      )
+      revisionId === "latest"
+        ? RevisionHelper.latestId(document?.id)
+        : revisionId
+    )
     : undefined;
 
   const isEditRoute =
@@ -165,6 +166,35 @@ function DataLoader({ match, children }: Props) {
     [document, documents]
   );
 
+  // Check if document has a board enabled and redirect to kanban view
+  // Only redirect if we're on a document page, not already on kanban page
+  const isKanbanRoute = location.pathname.startsWith("/kanban/");
+
+  React.useEffect(() => {
+    async function checkAndRedirectToBoard() {
+      // Skip redirect if already on kanban page, editing, or viewing revision
+      if (!document || !can.update || revisionId || isEditRoute || isKanbanRoute) {
+        setBoardChecked(true);
+        return;
+      }
+
+      try {
+        const board = await boards.checkEnabled(document.id);
+        if (board) {
+          // Set active document for sidebar before redirecting
+          ui.setActiveDocument(document);
+          const slug = document.url.split("/").pop();
+          history.replace(`/kanban/${slug}`);
+          return;
+        }
+      } catch {
+        // Board not enabled, continue with normal document view
+      }
+      setBoardChecked(true);
+    }
+    void checkAndRedirectToBoard();
+  }, [document, can.update, revisionId, isEditRoute, isKanbanRoute, boards, ui]);
+
   React.useEffect(() => {
     if (document) {
       // sets the current document as active in the sidebar
@@ -225,7 +255,7 @@ function DataLoader({ match, children }: Props) {
     return <Error404 />;
   }
 
-  if (!document || (revisionId && !revision)) {
+  if (!document || (revisionId && !revision) || !boardChecked) {
     return (
       <>
         <Loading location={location} />

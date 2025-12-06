@@ -20,10 +20,9 @@ export default class BoardCardsStore extends Store<BoardCard> {
     super(rootStore, BoardCard);
   }
 
-  inColumn = (columnId: string) =>
-    computed(() =>
-      this.orderedData.filter((card) => card.columnId === columnId)
-    ).get();
+  inColumn(columnId: string): BoardCard[] {
+    return this.orderedData.filter((card) => card.columnId === columnId);
+  }
 
   @computed
   get orderedData(): BoardCard[] {
