@@ -85,6 +85,9 @@ class BoardCard extends ParanoidModel<
 
   @Column(DataType.ARRAY(DataType.UUID))
   assigneeIds: string[] | null;
+
+  @Column(DataType.INTEGER)
+  dueOffsetDays: number | null;
 }
 
 export default BoardCard;

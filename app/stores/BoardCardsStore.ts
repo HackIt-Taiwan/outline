@@ -107,6 +107,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
     tags?: BoardTag[];
     assigneeIds?: string[] | null;
     metadata?: Record<string, unknown>;
+    dueOffsetDays?: number | null;
   }) {
     const card = this.get(params.id);
     if (!card) {
@@ -121,6 +122,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
       assigneeIds: card.assigneeIds,
       metadata: card.metadata,
       updatedAt: card.updatedAt,
+      dueOffsetDays: card.dueOffsetDays,
     };
 
     // Optimistic update
@@ -140,6 +142,9 @@ export default class BoardCardsStore extends Store<BoardCard> {
       if (params.metadata !== undefined) {
         card.metadata = params.metadata;
       }
+      if (params.dueOffsetDays !== undefined) {
+        card.dueOffsetDays = params.dueOffsetDays;
+      }
       card.updatedAt = new Date();
     });
 
@@ -150,6 +155,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
         description: params.description,
         tags: params.tags,
         assigneeIds: params.assigneeIds,
+        dueOffsetDays: params.dueOffsetDays,
         metadata: params.metadata as
           | Record<string, string | number | boolean | null>
           | undefined,
@@ -168,6 +174,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
         card.tags = previousState.tags;
         card.assigneeIds = previousState.assigneeIds;
         card.metadata = previousState.metadata;
+        card.dueOffsetDays = previousState.dueOffsetDays;
         card.updatedAt = previousState.updatedAt;
       });
       throw err;

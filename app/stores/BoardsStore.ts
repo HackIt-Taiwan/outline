@@ -64,6 +64,17 @@ export default class BoardsStore extends Store<Board> {
   }
 
   @action
+  async updateBoard(params: { id: string; title?: string; deadline?: string | null }) {
+    const res = await client.post("/boards.update", params);
+    invariant(res?.data, "Board response missing data");
+    return runInAction(() => {
+      const board = this.add(res.data.board ?? res.data);
+      this.addPolicies(res.policies);
+      return board;
+    });
+  }
+
+  @action
   removeByDocument(documentId: string) {
     this.filter((b) => b.documentId === documentId).forEach((b) =>
       this.remove(b.id)

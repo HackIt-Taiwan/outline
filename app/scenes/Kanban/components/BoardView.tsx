@@ -38,6 +38,7 @@ import useStores from "~/hooks/useStores";
 import useCurrentUser from "~/hooks/useCurrentUser";
 import { s } from "@shared/styles";
 import { v4 as uuidv4 } from "uuid";
+import { format as formatDate } from "date-fns";
 
 // Helper function to truncate text
 const truncateText = (text: string, maxLength: number = 80) => {
@@ -356,6 +357,7 @@ type SortableCardProps = {
   onSelect: (card: BoardCardModel) => void;
   isDragOverlay?: boolean;
   assignees: User[];
+  dueLabel?: string | null;
 };
 
 const SortableCard = ({
@@ -363,6 +365,7 @@ const SortableCard = ({
   onSelect,
   assignees,
   isDragOverlay,
+  dueLabel,
 }: SortableCardProps) => {
   const {
     attributes,
@@ -392,7 +395,10 @@ const SortableCard = ({
       onClick={() => !isDragging && onSelect(card)}
     >
       <CardContent>
-        <CardTitle>{card.title}</CardTitle>
+        <CardTitle>
+          {dueLabel && <DueBadge>{dueLabel}</DueBadge>}
+          {card.title}
+        </CardTitle>
         {card.description && (
           <CardDescription>
             {truncateText(card.description, 100)}
@@ -441,13 +447,18 @@ const SortableCard = ({
 const CardPreview = ({
   card,
   assignees,
+  dueLabel,
 }: {
   card: BoardCardModel;
   assignees: User[];
+  dueLabel?: string | null;
 }) => (
   <CardShell $isDragOverlay>
     <CardContent>
-      <CardTitle>{card.title}</CardTitle>
+      <CardTitle>
+        {dueLabel && <DueBadge>{dueLabel}</DueBadge>}
+        {card.title}
+      </CardTitle>
       {card.description && (
         <CardDescription>{truncateText(card.description, 100)}</CardDescription>
       )}
@@ -507,6 +518,7 @@ function BoardView({
   const [addingCardColumnId, setAddingCardColumnId] = useState<string | null>(
     null
   );
+  const [deadlineInput, setDeadlineInput] = useState<string>("");
   const addCardInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -547,6 +559,11 @@ function BoardView({
       .fetchForDocument(document.id)
       .then((board) => {
         setBoardId(board.id);
+        setDeadlineInput(
+          board.deadline
+            ? new Date(board.deadline).toISOString().slice(0, 16)
+            : ""
+        );
         setLoadError(null);
       })
       .catch((err: any) => {
@@ -560,12 +577,52 @@ function BoardView({
   }, [boards, document.id]);
 
   const board = boardId ? boards.get(boardId) : null;
+  const deadline = board?.deadline ? new Date(board.deadline) : null;
+  const [countdown, setCountdown] = useState<string>("-- 天 --:--:--");
 
   const columns = useMemo(
     () => (boardId ? boardColumns.inBoard(boardId) : []),
     [boardColumns, boardId]
   );
   const boardTags = board?.tags ?? [];
+
+  useEffect(() => {
+    if (board?.deadline) {
+      setDeadlineInput(new Date(board.deadline).toISOString().slice(0, 16));
+    } else {
+      setDeadlineInput("");
+    }
+  }, [board?.deadline]);
+
+  useEffect(() => {
+    if (!deadline) {
+      setCountdown("-- 天 --:--:--");
+      return;
+    }
+    const tick = () => {
+      const now = Date.now();
+      const diffMs = new Date(deadline).getTime() - now;
+      if (diffMs <= 0) {
+        setCountdown("00 天 00:00:00");
+        return;
+      }
+      const seconds = Math.floor(diffMs / 1000);
+      const days = Math.floor(seconds / 86400);
+      const hrs = Math.floor((seconds % 86400) / 3600)
+        .toString()
+        .padStart(2, "0");
+      const mins = Math.floor((seconds % 3600) / 60)
+        .toString()
+        .padStart(2, "0");
+      const secs = Math.floor(seconds % 60)
+        .toString()
+        .padStart(2, "0");
+      setCountdown(`${days.toString().padStart(2, "0")} 天 ${hrs}:${mins}:${secs}`);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [deadline]);
 
   const handleAddColumn = async () => {
     if (!newColumnTitle.trim() || !boardId) {
@@ -653,6 +710,7 @@ function BoardView({
       tags: card.tags ?? [],
       assigneeIds: card.assigneeIds ?? [],
       metadata: card.metadata ?? undefined,
+      dueOffsetDays: card.dueOffsetDays ?? null,
     });
     setSelectedCard(null);
   };
@@ -803,6 +861,22 @@ function BoardView({
     }
   };
 
+  const handleSaveDeadline = async () => {
+    if (!board || readOnly) {
+      return;
+    }
+    const iso = deadlineInput ? new Date(deadlineInput).toISOString() : null;
+    await boards.updateBoard({ id: board.id, deadline: iso });
+  };
+
+  const formatDueLabel = (offset: number | null | undefined) => {
+    if (!deadline || offset == null) {
+      return null;
+    }
+    const dueDate = new Date(deadline.getTime() - offset * 86400000);
+    return `D-${offset} (${formatDate(dueDate, "yyyy/MM/dd HH:mm")})`;
+  };
+
   if (isLoading || !boardId) {
     return (
       <LoadingWrap>
@@ -827,7 +901,24 @@ function BoardView({
           <Heading as="h2" size="small">
             {document.title}
           </Heading>
-          <Text type="tertiary">Kanban · 即時協作</Text>
+          <CountdownRow>
+            <Text type="tertiary">專案截止：</Text>
+            <Text weight="bold">{countdown}</Text>
+            <Input
+              type="datetime-local"
+              value={deadlineInput}
+              onChange={(e) => setDeadlineInput(e.target.value)}
+              onBlur={handleSaveDeadline}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleSaveDeadline();
+                }
+              }}
+              style={{ width: 210 }}
+              disabled={readOnly}
+            />
+          </CountdownRow>
         </Flex>
         <HeaderActions gap={8} align="center">
           <Collaborators document={document} limit={4} />
@@ -923,11 +1014,13 @@ function BoardView({
                       const cardAssignees = (card.assigneeIds ?? [])
                         .map((id) => users.get(id))
                         .filter(Boolean) as User[];
+                      const dueLabel = formatDueLabel(card.dueOffsetDays);
                       return (
                         <SortableCard
                           key={card.id}
                           card={card}
                           assignees={cardAssignees}
+                          dueLabel={dueLabel}
                           onSelect={(c) => setSelectedCard(c)}
                         />
                       );
@@ -994,7 +1087,11 @@ function BoardView({
           }}
         >
           {activeCard && (
-            <CardPreview card={activeCard} assignees={activeCardAssignees} />
+            <CardPreview
+              card={activeCard}
+              assignees={activeCardAssignees}
+              dueLabel={formatDueLabel(activeCard.dueOffsetDays)}
+            />
           )}
         </DragOverlay>
       </DndContext>
@@ -1074,6 +1171,30 @@ function BoardView({
                   disabled={readOnly}
                 />
               </PropertySection>
+              <PropertySection>
+                <PropertyLabel>倒數天數 (D-N)</PropertyLabel>
+                <Input
+                  type="number"
+                  min="0"
+                  value={selectedCard.dueOffsetDays ?? ""}
+                  placeholder="例如 50 代表 D-50"
+                  onChange={(ev) => {
+                    const val = ev.target.value;
+                    const num = val === "" ? null : Math.max(0, Number(val));
+                    runInAction(() => {
+                      selectedCard.dueOffsetDays =
+                        Number.isFinite(num as number) && num !== null ? num : null;
+                    });
+                  }}
+                  onBlur={() => void handleSaveCard(selectedCard)}
+                  readOnly={readOnly}
+                />
+                {formatDueLabel(selectedCard.dueOffsetDays) && deadline && (
+                  <Text type="tertiary" size="small">
+                    到期：{formatDueLabel(selectedCard.dueOffsetDays)}
+                  </Text>
+                )}
+              </PropertySection>
             </ModalSidebar>
             {!readOnly && (
               <ModalFooter>
@@ -1108,6 +1229,12 @@ const HeaderActions = styled(Flex)`
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+`;
+
+const CountdownRow = styled(Flex)`
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 `;
 
 const Columns = styled.div`
@@ -1255,6 +1382,10 @@ const CardTitle = styled.span`
   font-size: 13px;
   color: ${s("text")};
   line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 `;
 
 const CardDescription = styled.span`
@@ -1591,6 +1722,17 @@ const AssigneeNames = styled.span`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+`;
+
+const DueBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: ${s("accent")}22;
+  color: ${s("accent")};
+  font-size: 11px;
+  font-weight: 600;
 `;
 
 const TagSelectorWrapper = styled.div`

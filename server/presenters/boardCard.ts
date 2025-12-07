@@ -12,6 +12,7 @@ export default function presentBoardCard(card: BoardCard) {
     tags: card.tags,
     metadata: card.metadata,
     assigneeIds: card.assigneeIds ?? [],
+    dueOffsetDays: card.dueOffsetDays,
     index: card.index,
     createdAt: card.createdAt,
     updatedAt: card.updatedAt,

@@ -46,6 +46,9 @@ class Board extends ParanoidModel<
   @Column(DataType.JSONB)
   tags: { id: string; name: string; color?: string | null }[] | null;
 
+  @Column(DataType.DATE)
+  deadline: Date | null;
+
   @BelongsTo(() => User, "createdById")
   createdBy: User;
 

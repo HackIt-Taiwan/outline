@@ -7,6 +7,7 @@ export default function presentBoard(board: Board) {
     teamId: board.teamId,
     title: board.title,
     tags: board.tags ?? [],
+    deadline: board.deadline,
     createdAt: board.createdAt,
     updatedAt: board.updatedAt,
   };

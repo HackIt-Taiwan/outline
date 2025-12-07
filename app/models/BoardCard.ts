@@ -51,6 +51,10 @@ class BoardCard extends Model {
   @Relation(() => User, { multiple: true })
   assignees?: User[] | null;
 
+  @observable
+  @Field
+  dueOffsetDays?: number | null;
+
   @Relation(() => Board, { onDelete: "cascade" })
   board?: Board;
 

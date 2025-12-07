@@ -20,9 +20,13 @@ export default class BoardColumnsStore extends Store<BoardColumn> {
 
   @computed
   get orderedData(): BoardColumn[] {
-    return Array.from(this.data.values()).sort((a, b) =>
-      a.index.localeCompare(b.index)
-    );
+    return Array.from(this.data.values()).sort((a, b) => {
+      const indexCompare = a.index.localeCompare(b.index);
+      if (indexCompare !== 0) {
+        return indexCompare;
+      }
+      return (b.updatedAt?.getTime?.() ?? 0) - (a.updatedAt?.getTime?.() ?? 0);
+    });
   }
 
   @action
@@ -42,16 +46,31 @@ export default class BoardColumnsStore extends Store<BoardColumn> {
     beforeId?: string;
     afterId?: string;
   }) {
-    const res = await client.post("/boardColumns.move", {
-      id,
-      beforeId,
-      afterId,
-    });
-    invariant(res?.data, "Column data missing");
-    runInAction(() => {
-      this.add(res.data);
-      this.addPolicies(res.policies);
-    });
-    return this.data.get(res.data.id);
+    const column = this.get(id);
+    const previous = column
+      ? { index: column.index, updatedAt: column.updatedAt }
+      : undefined;
+
+    try {
+      const res = await client.post("/boardColumns.move", {
+        id,
+        beforeId,
+        afterId,
+      });
+      invariant(res?.data, "Column data missing");
+      runInAction(() => {
+        this.add(res.data);
+        this.addPolicies(res.policies);
+      });
+      return this.data.get(res.data.id);
+    } catch (err) {
+      if (column && previous) {
+        runInAction(() => {
+          column.index = previous.index;
+          column.updatedAt = previous.updatedAt;
+        });
+      }
+      throw err;
+    }
   }
 }

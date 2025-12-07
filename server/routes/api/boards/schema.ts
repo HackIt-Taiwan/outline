@@ -36,7 +36,8 @@ export type BoardsEnableReq = z.infer<typeof BoardsEnableSchema>;
 
 export const BoardsUpdateSchema = BaseSchema.extend({
   body: IdSchema.extend({
-    title: z.string().min(1).max(255),
+    title: z.string().min(1).max(255).optional(),
+    deadline: z.string().datetime().nullable().optional(),
   }),
 });
 export type BoardsUpdateReq = z.infer<typeof BoardsUpdateSchema>;
@@ -81,6 +82,7 @@ export const BoardCardsCreateSchema = BaseSchema.extend({
       tags: TagSchema.array().optional(),
       metadata: z.record(z.any()).optional(),
       assigneeIds: z.array(z.string().uuid()).optional(),
+      dueOffsetDays: z.number().int().min(0).optional(),
     })
   ),
 });
@@ -93,6 +95,7 @@ export const BoardCardsUpdateSchema = BaseSchema.extend({
     tags: TagSchema.array().nullable().optional(),
     metadata: z.record(z.any()).nullable().optional(),
     assigneeIds: z.array(z.string().uuid()).nullable().optional(),
+    dueOffsetDays: z.number().int().min(0).nullable().optional(),
   }),
 });
 export type BoardCardsUpdateReq = z.infer<typeof BoardCardsUpdateSchema>;

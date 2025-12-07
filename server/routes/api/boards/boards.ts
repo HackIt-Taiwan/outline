@@ -230,7 +230,7 @@ router.post(
   transaction(),
   validate(T.BoardsUpdateSchema),
   async (ctx: APIContext<T.BoardsUpdateReq>) => {
-    const { id, title } = ctx.input.body;
+    const { id, title, deadline } = ctx.input.body;
     const { user } = ctx.state.auth;
     const { transaction } = ctx.state;
 
@@ -245,7 +245,12 @@ router.post(
     });
     authorize(user, "update", document);
 
-    board.title = title;
+    if (title !== undefined) {
+      board.title = title;
+    }
+    if (deadline !== undefined) {
+      board.deadline = deadline ? new Date(deadline) : null;
+    }
     board.updatedById = user.id;
     await board.saveWithCtx(ctx, { transaction });
 
@@ -443,7 +448,17 @@ router.post(
   validate(T.BoardCardsCreateSchema),
   async (ctx: APIContext<T.BoardCardsCreateReq>) => {
     const { user } = ctx.state.auth;
-    const { documentId, boardId, columnId, title, description, tags, metadata, assigneeIds } =
+    const {
+      documentId,
+      boardId,
+      columnId,
+      title,
+      description,
+      tags,
+      metadata,
+      assigneeIds,
+      dueOffsetDays,
+    } =
       ctx.input.body;
     const { transaction } = ctx.state;
 
@@ -475,6 +490,7 @@ router.post(
       tags,
       metadata,
       assigneeIds: assigneeIds ?? null,
+      dueOffsetDays: dueOffsetDays ?? null,
       index,
       createdById: user.id,
       updatedById: user.id,
@@ -499,7 +515,7 @@ router.post(
   async (ctx: APIContext<T.BoardCardsUpdateReq>) => {
     const { user } = ctx.state.auth;
     const { transaction } = ctx.state;
-    const { id, title, description, tags, metadata, assigneeIds } =
+    const { id, title, description, tags, metadata, assigneeIds, dueOffsetDays } =
       ctx.input.body;
 
     const card = await BoardCard.findByPk(id, {
@@ -527,6 +543,9 @@ router.post(
     }
     if (assigneeIds !== undefined) {
       card.assigneeIds = assigneeIds;
+    }
+    if (dueOffsetDays !== undefined) {
+      card.dueOffsetDays = dueOffsetDays;
     }
     card.updatedById = user.id;
     await card.saveWithCtx(ctx, { transaction });

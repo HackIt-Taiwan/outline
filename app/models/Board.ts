@@ -36,6 +36,10 @@ class Board extends Model {
   @Field
   tags?: BoardTag[] | null;
 
+  @observable
+  @Field
+  deadline?: string | null;
+
   get searchContent(): string | string[] {
     return [this.title];
   }
