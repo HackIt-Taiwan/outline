@@ -111,6 +111,7 @@ class WebsocketProvider extends Component<Props> {
       boards,
       boardColumns,
       boardCards,
+      presence,
     } = this.props;
 
     const currentUserId = auth?.user?.id;
@@ -266,6 +267,8 @@ class WebsocketProvider extends Component<Props> {
           cards?: any[];
           deletedColumnIds?: string[];
           deletedCardIds?: string[];
+          documentId?: string;
+          actorId?: string;
         }) => {
           event.board && this.props.boards.add(event.board);
           event.columns?.forEach(this.props.boardColumns.add);
@@ -276,6 +279,9 @@ class WebsocketProvider extends Component<Props> {
           event.deletedCardIds?.forEach((id) =>
             this.props.boardCards.remove(id)
           );
+          if (event.documentId && event.actorId) {
+            this.props.presence.touch(event.documentId, event.actorId, true);
+          }
         }
       )
     );

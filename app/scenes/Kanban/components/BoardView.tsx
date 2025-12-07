@@ -19,6 +19,7 @@ import styled, { css } from "styled-components";
 import { BoardTag } from "@shared/types";
 import { Avatar, AvatarSize } from "~/components/Avatar";
 import Button from "~/components/Button";
+import Collaborators from "~/components/Collaborators";
 import Flex from "~/components/Flex";
 import Heading from "~/components/Heading";
 import Input from "~/components/Input";
@@ -26,12 +27,14 @@ import LoadingIndicator from "~/components/LoadingIndicator";
 import Modal from "~/components/Modal";
 import NudeButton from "~/components/NudeButton";
 import Scrollable from "~/components/Scrollable";
+import ShareButton from "~/scenes/Document/components/ShareButton";
 import Text from "~/components/Text";
 import BoardCardModel from "~/models/BoardCard";
 import BoardColumnModel from "~/models/BoardColumn";
 import Document from "~/models/Document";
 import User from "~/models/User";
 import useStores from "~/hooks/useStores";
+import useCurrentUser from "~/hooks/useCurrentUser";
 import { s } from "@shared/styles";
 
 // Helper function to truncate text
@@ -310,11 +313,14 @@ const CardPreview = ({ card }: { card: BoardCardModel }) => (
 );
 
 function BoardView({ document, abilities, readOnly }: Props) {
-  const { boards, boardColumns, boardCards, users } = useStores();
+  const { boards, boardColumns, boardCards, users, presence } = useStores();
+  const currentUser = useCurrentUser();
   const [boardId, setBoardId] = useState<string | null>(null);
   const [isLoading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [newColumnTitle, setNewColumnTitle] = useState("");
+  const [newColumnColor, setNewColumnColor] = useState("");
+  const [showColumnModal, setShowColumnModal] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState<Record<string, string>>({});
   const [selectedCard, setSelectedCard] = useState<BoardCardModel | null>(null);
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
@@ -338,6 +344,19 @@ function BoardView({ document, abilities, readOnly }: Props) {
   useEffect(() => {
     void users.fetchPage({ limit: 100 });
   }, [users]);
+
+  // Touch presence so collaborators facepile stays in sync when viewing Kanban
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+    presence.touch(document.id, currentUser.id, false);
+    const interval = setInterval(
+      () => presence.touch(document.id, currentUser.id, false),
+      20000
+    );
+    return () => clearInterval(interval);
+  }, [currentUser, document.id, presence]);
 
   useEffect(() => {
     setLoading(true);
@@ -364,10 +383,13 @@ function BoardView({ document, abilities, readOnly }: Props) {
     }
     await boardColumns.create({
       title: newColumnTitle.trim(),
+      color: newColumnColor || undefined,
       boardId,
       documentId: document.id,
     });
     setNewColumnTitle("");
+    setNewColumnColor("");
+    setShowColumnModal(false);
   };
 
   const handleAddCard = async (column: BoardColumnModel) => {
@@ -553,13 +575,17 @@ function BoardView({ document, abilities, readOnly }: Props) {
   }
 
   return (
-    <BoardSurface flex hiddenScrollbars>
+    <BoardSurface auto hideScrollbars>
       <Header>
         <div>
           <Heading>{document.title}</Heading>
           <Text type="secondary">Kanban board</Text>
         </div>
-        <Flex align="center" gap={8}>
+        <Flex align="center" gap={12}>
+          <Collaborators document={document} limit={5} />
+          {abilities.share && (
+            <ShareButton document={document} key="share-button" />
+          )}
           <Button
             neutral
             onClick={() => {
@@ -568,18 +594,6 @@ function BoardView({ document, abilities, readOnly }: Props) {
           >
             查看文件
           </Button>
-          {!readOnly && (
-            <>
-              <Input
-                placeholder="New column name"
-                value={newColumnTitle}
-                onChange={(ev) => setNewColumnTitle(ev.target.value)}
-              />
-              <Button onClick={handleAddColumn} disabled={!newColumnTitle.trim()}>
-                Add column
-              </Button>
-            </>
-          )}
         </Flex>
       </Header>
       <DndContext
@@ -707,6 +721,12 @@ function BoardView({ document, abilities, readOnly }: Props) {
               </Column>
             );
           })}
+          {!readOnly && (
+            <AddColumnCard onClick={() => setShowColumnModal(true)}>
+              <PlusIcon size={18} />
+              <span>新增分類</span>
+            </AddColumnCard>
+          )}
         </Columns>
         <DragOverlay dropAnimation={{
           duration: 200,
@@ -715,6 +735,35 @@ function BoardView({ document, abilities, readOnly }: Props) {
           {activeCard && <CardPreview card={activeCard} />}
         </DragOverlay>
       </DndContext>
+
+      <Modal
+        isOpen={showColumnModal}
+        title="新增分類"
+        onRequestClose={() => setShowColumnModal(false)}
+      >
+        <Flex column gap={12}>
+          <Input
+            label="分類名稱"
+            value={newColumnTitle}
+            onChange={(ev) => setNewColumnTitle(ev.target.value)}
+            autoFocus
+          />
+          <Input
+            label="顏色 (可選)"
+            value={newColumnColor}
+            onChange={(ev) => setNewColumnColor(ev.target.value)}
+            placeholder="#8e9aa6"
+          />
+          <Flex gap={8} justify="flex-end">
+            <Button neutral onClick={() => setShowColumnModal(false)}>
+              取消
+            </Button>
+            <Button onClick={handleAddColumn} disabled={!newColumnTitle.trim()}>
+              新增
+            </Button>
+          </Flex>
+        </Flex>
+      </Modal>
 
       <Modal
         isOpen={!!selectedCard}
@@ -1017,6 +1066,27 @@ const LoadingWrap = styled(Flex)`
   padding: 64px;
   align-items: center;
   justify-content: center;
+`;
+
+const AddColumnCard = styled.button`
+  min-width: 220px;
+  min-height: 120px;
+  border: 2px dashed ${s("divider")};
+  border-radius: 12px;
+  background: transparent;
+  color: ${s("textSecondary")};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: var(--pointer);
+  transition: border 120ms ease, transform 120ms ease, color 120ms ease;
+
+  &:hover {
+    border-color: ${s("accent")};
+    color: ${s("text")};
+    transform: translateY(-2px);
+  }
 `;
 
 const BoardSurface = styled(Scrollable)`

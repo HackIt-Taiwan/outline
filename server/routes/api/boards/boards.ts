@@ -77,7 +77,11 @@ const emitBoardChange = (
   Event.createFromContext(ctx, {
     name: "boards.change",
     documentId,
-    data,
+    data: {
+      documentId,
+      actorId: ctx.state.auth.user.id,
+      ...data,
+    },
   });
 
 router.post(
