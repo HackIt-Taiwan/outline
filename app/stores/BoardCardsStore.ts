@@ -1,4 +1,5 @@
 import { action, computed, runInAction } from "mobx";
+import { toast } from "sonner";
 import invariant from "invariant";
 import fractionalIndex from "fractional-index";
 import BoardCard from "~/models/BoardCard";
@@ -83,18 +84,20 @@ export default class BoardCardsStore extends Store<BoardCard> {
         afterId,
       });
       invariant(res?.data, "Card data missing");
+      const incomingUpdatedAt = res.data.updatedAt
+        ? new Date(res.data.updatedAt)
+        : undefined;
+      const existing = this.get(res.data.id);
+      if (existing && incomingUpdatedAt && existing.updatedAt > incomingUpdatedAt) {
+        return existing;
+      }
       runInAction(() => {
         this.add(res.data);
         this.addPolicies(res.policies);
       });
       return this.data.get(res.data.id);
     } catch (err) {
-      // Rollback on error
-      runInAction(() => {
-        card.columnId = previousColumnId;
-        card.index = previousIndex;
-        card.updatedAt = previousUpdatedAt;
-      });
+      toast.error("移動卡片失敗，已保留目前位置");
       throw err;
     }
   }
@@ -161,6 +164,13 @@ export default class BoardCardsStore extends Store<BoardCard> {
           | undefined,
       });
       invariant(res?.data, "Card data missing");
+      const incomingUpdatedAt = res.data.updatedAt
+        ? new Date(res.data.updatedAt)
+        : undefined;
+      const existing = this.get(res.data.id);
+      if (existing && incomingUpdatedAt && existing.updatedAt > incomingUpdatedAt) {
+        return existing;
+      }
       runInAction(() => {
         this.add(res.data);
         this.addPolicies(res.policies);
@@ -177,6 +187,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
         card.dueOffsetDays = previousState.dueOffsetDays;
         card.updatedAt = previousState.updatedAt;
       });
+      toast.error("更新卡片失敗，已恢復先前內容");
       throw err;
     }
   }

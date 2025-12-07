@@ -15,6 +15,7 @@ import Logger from "@server/logging/Logger";
 import passportMiddleware from "@server/middlewares/passport";
 import { AuthenticationProvider, User } from "@server/models";
 import { AuthenticationResult } from "@server/types";
+import fetch from "@server/utils/fetch";
 import {
   StateStore,
   getTeamFromContext,
@@ -32,6 +33,59 @@ export interface OIDCEndpoints {
   userInfoURL: string;
   logoutURL?: string;
   pkce?: boolean;
+}
+
+type PassportProfile = {
+  id: string;
+  logto_id?: string;
+  email: string;
+  nickname?: string;
+  avatar_url?: string | null;
+  preferred_language?: string | null;
+};
+
+async function fetchPassportProfile(email: string) {
+  if (!env.PASSPORT_API_BASE_URL || !env.PASSPORT_API_TOKEN) {
+    return null;
+  }
+
+  const baseUrl = env.PASSPORT_API_BASE_URL.replace(/\/$/, "");
+  const url = `${baseUrl}/services/profile-by-email?email=${encodeURIComponent(email)}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      allowPrivateIPAddress: true,
+      headers: {
+        "X-API-Token": env.PASSPORT_API_TOKEN,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      Logger.warn("Passport profile lookup failed", {
+        email,
+        status: response.status,
+      });
+      return null;
+    }
+
+    const data = (await response.json()) as {
+      found?: boolean;
+      profile?: PassportProfile | null;
+    };
+
+    if (data?.found && data.profile) {
+      return data.profile;
+    }
+
+    Logger.debug("authentication", "Passport profile not found", { email });
+    return null;
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    Logger.error("Failed to fetch Passport profile", error, { email });
+    return null;
+  }
 }
 
 /**
@@ -119,6 +173,8 @@ export function createOIDCRouter(
             );
           }
 
+          const passportProfile = await fetchPassportProfile(email);
+
           const team = await getTeamFromContext(context);
           const client = getClientFromContext(context);
           const { domain } = parseEmail(email);
@@ -158,7 +214,11 @@ export function createOIDCRouter(
           const username =
             get(profile, env.OIDC_USERNAME_CLAIM) ??
             get(token, env.OIDC_USERNAME_CLAIM);
-          const name = profile.name || username || profile.username;
+          const name =
+            passportProfile?.nickname ||
+            profile.name ||
+            username ||
+            profile.username;
           const profileId = profile.sub ? profile.sub : profile.id;
 
           if (!name) {
@@ -174,8 +234,8 @@ export function createOIDCRouter(
 
           // Check if the picture field is a Base64 data URL and filter it out
           // to avoid validation errors in the User model
-          let avatarUrl = profile.picture;
-          if (profile.picture && isBase64Url(profile.picture)) {
+          let avatarUrl = passportProfile?.avatar_url ?? profile.picture;
+          if (avatarUrl && isBase64Url(avatarUrl)) {
             Logger.debug(
               "authentication",
               "Filtering out Base64 data URL from avatar",
@@ -198,6 +258,7 @@ export function createOIDCRouter(
               name,
               email,
               avatarUrl,
+              language: passportProfile?.preferred_language ?? undefined,
             },
             authenticationProvider: {
               name: config.id,

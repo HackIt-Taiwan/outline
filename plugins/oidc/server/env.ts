@@ -105,6 +105,29 @@ class OIDCPluginEnvironment extends Environment {
     allow_underscores: true,
   })
   public OIDC_LOGOUT_URI = this.toOptionalString(environment.OIDC_LOGOUT_URI);
+
+  /**
+   * Base URL for Passport API (should include the /api prefix).
+   * Used to enrich profile data after OIDC authentication.
+   */
+  @IsOptional()
+  @CannotUseWithout("PASSPORT_API_TOKEN")
+  @IsUrl({
+    require_tld: false,
+    allow_underscores: true,
+  })
+  public PASSPORT_API_BASE_URL = this.toOptionalString(
+    environment.PASSPORT_API_BASE_URL
+  );
+
+  /**
+   * Service token for Passport API lookups.
+   */
+  @IsOptional()
+  @CannotUseWithout("PASSPORT_API_BASE_URL")
+  public PASSPORT_API_TOKEN = this.toOptionalString(
+    environment.PASSPORT_API_TOKEN
+  );
 }
 
 export default new OIDCPluginEnvironment();
