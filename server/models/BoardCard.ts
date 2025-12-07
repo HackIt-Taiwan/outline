@@ -83,12 +83,8 @@ class BoardCard extends ParanoidModel<
   @Column(DataType.UUID)
   updatedById: string | null;
 
-  @BelongsTo(() => User, "assigneeId")
-  assignee: User | null;
-
-  @ForeignKey(() => User)
-  @Column(DataType.UUID)
-  assigneeId: string | null;
+  @Column(DataType.ARRAY(DataType.UUID))
+  assigneeIds: string[] | null;
 }
 
 export default BoardCard;

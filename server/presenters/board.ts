@@ -6,6 +6,7 @@ export default function presentBoard(board: Board) {
     documentId: board.documentId,
     teamId: board.teamId,
     title: board.title,
+    tags: board.tags ?? [],
     createdAt: board.createdAt,
     updatedAt: board.updatedAt,
   };

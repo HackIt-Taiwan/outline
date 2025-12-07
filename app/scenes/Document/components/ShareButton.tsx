@@ -20,9 +20,11 @@ const SharePopover = lazyWithRetry(
 type Props = {
   /** Document being shared */
   document: Document;
+  /** Optional view mode override (eg. kanban) */
+  view?: "kanban" | "document";
 };
 
-function ShareButton({ document }: Props) {
+function ShareButton({ document, view }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const { shares } = useStores();
@@ -57,6 +59,7 @@ function ShareButton({ document }: Props) {
         <Suspense fallback={null}>
           <SharePopover
             document={document}
+            view={view}
             onRequestClose={closePopover}
             visible={open}
           />

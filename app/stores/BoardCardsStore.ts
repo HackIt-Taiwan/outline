@@ -100,7 +100,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
     title?: string;
     description?: string;
     tags?: BoardTag[];
-    assigneeId?: string | null;
+    assigneeIds?: string[] | null;
     metadata?: Record<string, unknown>;
   }) {
     const card = this.get(params.id);
@@ -113,7 +113,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
       title: card.title,
       description: card.description,
       tags: card.tags,
-      assigneeId: card.assigneeId,
+      assigneeIds: card.assigneeIds,
       metadata: card.metadata,
     };
 
@@ -128,8 +128,8 @@ export default class BoardCardsStore extends Store<BoardCard> {
       if (params.tags !== undefined) {
         card.tags = params.tags;
       }
-      if (params.assigneeId !== undefined) {
-        card.assigneeId = params.assigneeId;
+      if (params.assigneeIds !== undefined) {
+        card.assigneeIds = params.assigneeIds;
       }
       if (params.metadata !== undefined) {
         card.metadata = params.metadata;
@@ -142,7 +142,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
         title: params.title,
         description: params.description,
         tags: params.tags,
-        assigneeId: params.assigneeId,
+        assigneeIds: params.assigneeIds,
         metadata: params.metadata as Record<string, string | number | boolean | null> | undefined,
       });
       invariant(res?.data, "Card data missing");
@@ -157,7 +157,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
         card.title = previousState.title;
         card.description = previousState.description;
         card.tags = previousState.tags;
-        card.assigneeId = previousState.assigneeId;
+        card.assigneeIds = previousState.assigneeIds;
         card.metadata = previousState.metadata;
       });
       throw err;

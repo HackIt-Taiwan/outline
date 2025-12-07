@@ -11,7 +11,7 @@ export default function presentBoardCard(card: BoardCard) {
     description: card.description,
     tags: card.tags,
     metadata: card.metadata,
-    assigneeId: card.assigneeId,
+    assigneeIds: card.assigneeIds ?? [],
     index: card.index,
     createdAt: card.createdAt,
     updatedAt: card.updatedAt,

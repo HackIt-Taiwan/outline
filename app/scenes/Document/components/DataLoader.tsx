@@ -169,11 +169,13 @@ function DataLoader({ match, children }: Props) {
   // Check if document has a board enabled and redirect to kanban view
   // Only redirect if we're on a document page, not already on kanban page
   const isKanbanRoute = location.pathname.startsWith("/kanban/");
+  const isDocumentView =
+    new URLSearchParams(location.search).get("view") === "document";
 
   React.useEffect(() => {
     async function checkAndRedirectToBoard() {
       // Skip redirect if already on kanban page, editing, or viewing revision
-      if (!document || !can.update || revisionId || isEditRoute || isKanbanRoute) {
+      if (!document || revisionId || isEditRoute || isKanbanRoute || isDocumentView) {
         setBoardChecked(true);
         return;
       }
@@ -183,6 +185,7 @@ function DataLoader({ match, children }: Props) {
         if (board) {
           // Set active document for sidebar before redirecting
           ui.setActiveDocument(document);
+          setBoardChecked(true);
           const slug = document.url.split("/").pop();
           history.replace(`/kanban/${slug}`);
           return;
@@ -193,7 +196,16 @@ function DataLoader({ match, children }: Props) {
       setBoardChecked(true);
     }
     void checkAndRedirectToBoard();
-  }, [document, can.update, revisionId, isEditRoute, isKanbanRoute, boards, ui]);
+  }, [
+    document,
+    can.update,
+    revisionId,
+    isEditRoute,
+    isKanbanRoute,
+    isDocumentView,
+    boards,
+    ui,
+  ]);
 
   React.useEffect(() => {
     if (document) {

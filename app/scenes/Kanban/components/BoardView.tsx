@@ -14,6 +14,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { observer } from "mobx-react";
 import { EditIcon, TrashIcon, PlusIcon } from "outline-icons";
+import { runInAction } from "mobx";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import styled, { css } from "styled-components";
 import { BoardTag } from "@shared/types";
@@ -36,6 +37,7 @@ import User from "~/models/User";
 import useStores from "~/hooks/useStores";
 import useCurrentUser from "~/hooks/useCurrentUser";
 import { s } from "@shared/styles";
+import { v4 as uuidv4 } from "uuid";
 
 // Helper function to truncate text
 const truncateText = (text: string, maxLength: number = 80) => {
@@ -49,59 +51,175 @@ type Props = {
   document: Document;
   abilities: Record<string, boolean>;
   readOnly: boolean;
+  showDocumentLink?: boolean;
 };
 
-type TagEditorProps = {
+const TAG_COLORS = [
+  "#3366FF",
+  "#00B894",
+  "#FFB020",
+  "#E84A5F",
+  "#7C4DFF",
+  "#1BC8C8",
+  "#FF6B6B",
+  "#8D99AE",
+];
+
+type TagSelectorProps = {
+  boardTags: BoardTag[];
   value: BoardTag[] | null | undefined;
   onChange: (tags: BoardTag[]) => void;
+  onCreateTag: (tag: BoardTag) => void;
+  onDeleteTag: (tagId: string) => void;
+  disabled?: boolean;
 };
 
-const TagEditor = ({ value, onChange }: TagEditorProps) => {
-  const [raw, setRaw] = useState(
-    value?.map((tag) => tag.name).join(", ") ?? ""
+const TagSelector = ({
+  boardTags,
+  value,
+  onChange,
+  onCreateTag,
+  onDeleteTag,
+  disabled,
+}: TagSelectorProps) => {
+  const [newTagName, setNewTagName] = useState("");
+  const selectedIds = useMemo(
+    () => new Set(value?.map((tag) => tag.id) ?? []),
+    [value]
+  );
+  const availableTags = useMemo(() => {
+    const map = new Map<string, BoardTag>();
+    boardTags.forEach((tag) => map.set(tag.id, tag));
+    (value ?? []).forEach((tag) => {
+      if (!map.has(tag.id)) {
+        map.set(tag.id, tag);
+      }
+    });
+    return Array.from(map.values());
+  }, [boardTags, value]);
+
+  if (disabled) {
+    const tagsToShow = availableTags;
+    return (
+      <TagSelectorWrapper>
+        <TagList>
+          {tagsToShow.length ? (
+            tagsToShow.map((tag) => (
+              <TagChip key={tag.id} $selected $color={tag.color} as="div">
+                <span>{tag.name}</span>
+                <Dot $color={tag.color} />
+              </TagChip>
+            ))
+          ) : (
+            <Text type="tertiary" size="small">
+              尚未設定
+            </Text>
+          )}
+        </TagList>
+      </TagSelectorWrapper>
+    );
+  }
+
+  const toggleTag = useCallback(
+    (tag: BoardTag) => {
+      const next = selectedIds.has(tag.id)
+        ? (value ?? []).filter((t) => t.id !== tag.id)
+        : [...(value ?? []), tag];
+      onChange(next);
+    },
+    [onChange, selectedIds, value]
   );
 
-  useEffect(() => {
-    setRaw(value?.map((tag) => tag.name).join(", ") ?? "");
-  }, [value]);
+  const handleCreate = useCallback(() => {
+    const name = newTagName.trim();
+    if (!name) {
+      return;
+    }
+    const color = TAG_COLORS[boardTags.length % TAG_COLORS.length];
+    const tag = { id: uuidv4(), name, color };
+    onCreateTag(tag);
+    const existing = value ?? [];
+    const alreadySelected = existing.find((t) => t.id === tag.id);
+    if (!alreadySelected) {
+      onChange([...existing, tag]);
+    }
+    setNewTagName("");
+  }, [boardTags.length, newTagName, onChange, onCreateTag, value]);
 
   return (
-    <Input
-      value={raw}
-      onChange={(ev) => {
-        const next = ev.target.value;
-        setRaw(next);
-        const tags = next
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean)
-          .map((name) => ({
-            id: name,
-            name,
-          }));
-        onChange(tags);
-      }}
-      placeholder="tag1, tag2"
-    />
+    <TagSelectorWrapper>
+      <TagList>
+        {availableTags.map((tag) => (
+          <TagChip
+            key={tag.id}
+            $selected={selectedIds.has(tag.id)}
+            $color={tag.color}
+            onClick={() => toggleTag(tag)}
+          >
+            <span>{tag.name}</span>
+            <ChipActions>
+              <Dot $color={tag.color} />
+              <TagRemove
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  onDeleteTag(tag.id);
+                }}
+                aria-label="Delete tag"
+              >
+                ×
+              </TagRemove>
+            </ChipActions>
+          </TagChip>
+        ))}
+      </TagList>
+      <TagInputRow>
+        <TagInput
+          value={newTagName}
+          placeholder="新增標籤"
+          onChange={(ev) => setNewTagName(ev.target.value)}
+          onKeyDown={(ev) => {
+            if (ev.key === "Enter") {
+              ev.preventDefault();
+              handleCreate();
+            }
+          }}
+        />
+        <Button
+          neutral
+          onClick={handleCreate}
+          disabled={!newTagName.trim()}
+        >
+          新增
+        </Button>
+      </TagInputRow>
+    </TagSelectorWrapper>
   );
 };
 
-// User selector component with search
-type UserSelectorProps = {
-  value: string | null | undefined;
-  onChange: (userId: string | null, user: User | null) => void;
+type MultiUserSelectorProps = {
+  value: string[] | null | undefined;
+  onChange: (userIds: string[]) => void;
   users: User[];
+  disabled?: boolean;
 };
 
-const UserSelector = ({ value, onChange, users }: UserSelectorProps) => {
+const MultiUserSelector = ({
+  value,
+  onChange,
+  users,
+  disabled,
+}: MultiUserSelectorProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const selectedUser = useMemo(
-    () => (value ? users.find((u) => u.id === value) : null),
-    [value, users]
+  const selectedIds = value ?? [];
+  const selectedUsers = useMemo(
+    () =>
+      selectedIds
+        .map((id) => users.find((u) => u.id === id))
+        .filter(Boolean) as User[],
+    [selectedIds, users]
   );
 
   const filteredUsers = useMemo(() => {
@@ -116,16 +234,16 @@ const UserSelector = ({ value, onChange, users }: UserSelectorProps) => {
     );
   }, [users, search]);
 
-  const handleSelect = useCallback(
-    (user: User | null) => {
-      onChange(user?.id ?? null, user);
-      setIsOpen(false);
-      setSearch("");
+  const toggleUser = useCallback(
+    (userId: string) => {
+      const next = selectedIds.includes(userId)
+        ? selectedIds.filter((id) => id !== userId)
+        : [...selectedIds, userId];
+      onChange(next);
     },
-    [onChange]
+    [onChange, selectedIds]
   );
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -139,40 +257,54 @@ const UserSelector = ({ value, onChange, users }: UserSelectorProps) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  return (
-    <UserSelectorWrapper ref={dropdownRef}>
-      <UserSelectorTrigger onClick={() => setIsOpen(!isOpen)}>
-        {selectedUser ? (
-          <Flex align="center" gap={8}>
-            <Avatar model={selectedUser} size={AvatarSize.Medium} />
-            <span>{selectedUser.name}</span>
-          </Flex>
+  if (disabled) {
+    return (
+      <SelectedAssignees>
+        {selectedUsers.length ? (
+          selectedUsers.map((user) => (
+            <AssigneeChip key={user.id}>
+              <Avatar model={user} size={AvatarSize.Small} />
+              <span>{user.name}</span>
+            </AssigneeChip>
+          ))
         ) : (
           <Text type="tertiary" size="small">
-            Select assignee...
+            尚未指派
           </Text>
         )}
-      </UserSelectorTrigger>
+      </SelectedAssignees>
+    );
+  }
+
+  return (
+    <UserSelectorWrapper ref={dropdownRef}>
+      <SelectedAssignees>
+        {selectedUsers.map((user) => (
+          <AssigneeChip key={user.id} onClick={() => toggleUser(user.id)}>
+            <Avatar model={user} size={AvatarSize.Small} />
+            <span>{user.name}</span>
+            <ChipClose>×</ChipClose>
+          </AssigneeChip>
+        ))}
+        <AssigneeAdd onClick={() => setIsOpen((open) => !open)}>
+          <PlusIcon size={14} />
+          指派成員
+        </AssigneeAdd>
+      </SelectedAssignees>
       {isOpen && (
         <UserDropdown>
           <UserSearchInput
-            ref={inputRef}
             value={search}
             onChange={(ev) => setSearch(ev.target.value)}
-            placeholder="Search users..."
+            placeholder="搜尋成員…"
             autoFocus
           />
           <UserList>
-            <UserOption onClick={() => handleSelect(null)}>
-              <Text type="tertiary" size="small">
-                No assignee
-              </Text>
-            </UserOption>
             {filteredUsers.map((user) => (
               <UserOption
                 key={user.id}
-                onClick={() => handleSelect(user)}
-                $selected={user.id === value}
+                onClick={() => toggleUser(user.id)}
+                $selected={selectedIds.includes(user.id)}
               >
                 <Avatar model={user} size={AvatarSize.Medium} />
                 <Flex column style={{ minWidth: 0 }}>
@@ -227,9 +359,15 @@ type SortableCardProps = {
   card: BoardCardModel;
   onSelect: (card: BoardCardModel) => void;
   isDragOverlay?: boolean;
+  assignees: User[];
 };
 
-const SortableCard = ({ card, onSelect, isDragOverlay }: SortableCardProps) => {
+const SortableCard = ({
+  card,
+  onSelect,
+  assignees,
+  isDragOverlay,
+}: SortableCardProps) => {
   const {
     attributes,
     listeners,
@@ -277,9 +415,26 @@ const SortableCard = ({ card, onSelect, isDragOverlay }: SortableCardProps) => {
           </CardTagRow>
         ) : null}
       </CardContent>
-      {card.assignee && (
+      {assignees.length > 0 && (
         <CardFooter>
-          <Avatar model={card.assignee} size={AvatarSize.Medium} />
+          <AssigneeRow>
+            <AvatarStack>
+              {assignees.slice(0, 3).map((assignee) => (
+                <Avatar
+                  key={assignee.id}
+                  model={assignee}
+                  size={AvatarSize.Small}
+                />
+              ))}
+            </AvatarStack>
+            <AssigneeNames title={assignees.map((a) => a.name).join(", ")}>
+              {assignees
+                .slice(0, 2)
+                .map((a) => a.name)
+                .join(", ")}
+              {assignees.length > 2 ? ` +${assignees.length - 2}` : ""}
+            </AssigneeNames>
+          </AssigneeRow>
         </CardFooter>
       )}
     </CardShell>
@@ -287,7 +442,13 @@ const SortableCard = ({ card, onSelect, isDragOverlay }: SortableCardProps) => {
 };
 
 // Card preview for drag overlay
-const CardPreview = ({ card }: { card: BoardCardModel }) => (
+const CardPreview = ({
+  card,
+  assignees,
+}: {
+  card: BoardCardModel;
+  assignees: User[];
+}) => (
   <CardShell $isDragOverlay>
     <CardContent>
       <CardTitle>{card.title}</CardTitle>
@@ -304,22 +465,43 @@ const CardPreview = ({ card }: { card: BoardCardModel }) => (
         </CardTagRow>
       ) : null}
     </CardContent>
-    {card.assignee && (
+    {assignees.length > 0 && (
       <CardFooter>
-        <Avatar model={card.assignee} size={AvatarSize.Medium} />
+        <AssigneeRow>
+          <AvatarStack>
+            {assignees.slice(0, 3).map((assignee) => (
+              <Avatar
+                key={assignee.id}
+                model={assignee}
+                size={AvatarSize.Small}
+              />
+            ))}
+          </AvatarStack>
+          <AssigneeNames>
+            {assignees
+              .slice(0, 2)
+              .map((a) => a.name)
+              .join(", ")}
+            {assignees.length > 2 ? ` +${assignees.length - 2}` : ""}
+          </AssigneeNames>
+        </AssigneeRow>
       </CardFooter>
     )}
   </CardShell>
 );
 
-function BoardView({ document, abilities, readOnly }: Props) {
+function BoardView({
+  document,
+  abilities,
+  readOnly,
+  showDocumentLink = true,
+}: Props) {
   const { boards, boardColumns, boardCards, users, presence } = useStores();
   const currentUser = useCurrentUser();
   const [boardId, setBoardId] = useState<string | null>(null);
   const [isLoading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [newColumnTitle, setNewColumnTitle] = useState("");
-  const [newColumnColor, setNewColumnColor] = useState("");
   const [showColumnModal, setShowColumnModal] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState<Record<string, string>>({});
   const [selectedCard, setSelectedCard] = useState<BoardCardModel | null>(null);
@@ -339,6 +521,11 @@ function BoardView({ document, abilities, readOnly }: Props) {
   );
 
   const activeCard = activeCardId ? boardCards.get(activeCardId) : null;
+  const activeCardAssignees = activeCard
+    ? (activeCard.assigneeIds ?? [])
+        .map((id) => users.get(id))
+        .filter(Boolean) as User[]
+    : [];
 
   // Fetch all users for the assignee selector
   useEffect(() => {
@@ -366,16 +553,23 @@ function BoardView({ document, abilities, readOnly }: Props) {
         setBoardId(board.id);
         setLoadError(null);
       })
-      .catch((err) => {
-        setLoadError(err?.message ?? "Unable to load board");
+      .catch((err: any) => {
+        if (err?.status === 404) {
+          setLoadError("此文件尚未啟用看板，請在指令列輸入 /kanban 開啟。");
+        } else {
+          setLoadError(err?.message ?? "Unable to load board");
+        }
       })
       .finally(() => setLoading(false));
   }, [boards, document.id]);
+
+  const board = boardId ? boards.get(boardId) : null;
 
   const columns = useMemo(
     () => (boardId ? boardColumns.inBoard(boardId) : []),
     [boardColumns, boardId]
   );
+  const boardTags = board?.tags ?? [];
 
   const handleAddColumn = async () => {
     if (!newColumnTitle.trim() || !boardId) {
@@ -383,12 +577,10 @@ function BoardView({ document, abilities, readOnly }: Props) {
     }
     await boardColumns.create({
       title: newColumnTitle.trim(),
-      color: newColumnColor || undefined,
       boardId,
       documentId: document.id,
     });
     setNewColumnTitle("");
-    setNewColumnColor("");
     setShowColumnModal(false);
   };
 
@@ -463,7 +655,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
       title: card.title,
       description: card.description ?? "",
       tags: card.tags ?? [],
-      assigneeId: card.assigneeId ?? undefined,
+      assigneeIds: card.assigneeIds ?? [],
       metadata: card.metadata ?? undefined,
     });
   };
@@ -473,16 +665,73 @@ function BoardView({ document, abilities, readOnly }: Props) {
     setSelectedCard(null);
   };
 
-  const handleSelectAssignee = (userId: string | null, user: User | null) => {
-    setSelectedCard((prev) =>
-      prev
-        ? Object.assign(
-          prev,
-          { assigneeId: userId, assignee: user } // mutate observable
-        )
-        : null
-    );
+  const handleAssigneesChange = async (userIds: string[]) => {
+    if (!selectedCard) {
+      return;
+    }
+    runInAction(() => {
+      selectedCard.assigneeIds = userIds;
+    });
+    await boardCards.updateCard({
+      id: selectedCard.id,
+      assigneeIds: userIds,
+    });
   };
+
+  const handleCardTagsChange = async (tags: BoardTag[]) => {
+    if (!selectedCard) {
+      return;
+    }
+    runInAction(() => {
+      selectedCard.tags = tags;
+    });
+    await boardCards.updateCard({
+      id: selectedCard.id,
+      tags,
+    });
+  };
+
+  const persistBoardTags = useCallback(
+    async (tags: BoardTag[]) => {
+      if (!boardId) {
+        return;
+      }
+      await boards.updateTags(boardId, tags);
+    },
+    [boardId, boards]
+  );
+
+  const handleCreateBoardTag = useCallback(
+    (tag: BoardTag) => {
+      const next = [...boardTags, tag];
+      if (board) {
+        runInAction(() => {
+          board.tags = next;
+        });
+      }
+      void persistBoardTags(next);
+    },
+    [board, boardTags, persistBoardTags]
+  );
+
+  const handleDeleteBoardTag = useCallback(
+    (tagId: string) => {
+      const next = boardTags.filter((tag) => tag.id !== tagId);
+      if (board) {
+        runInAction(() => {
+          board.tags = next;
+        });
+      }
+      void persistBoardTags(next);
+      setSelectedCard((prev) => {
+        if (prev?.tags) {
+          prev.tags = prev.tags.filter((tag) => tag.id !== tagId);
+        }
+        return prev;
+      });
+    },
+    [board, boardTags, persistBoardTags]
+  );
 
   const handleEditColumn = (column: BoardColumnModel) => {
     setEditingColumnId(column.id);
@@ -577,24 +826,31 @@ function BoardView({ document, abilities, readOnly }: Props) {
   return (
     <BoardSurface auto hideScrollbars>
       <Header>
-        <div>
-          <Heading>{document.title}</Heading>
-          <Text type="secondary">Kanban board</Text>
-        </div>
-        <Flex align="center" gap={12}>
-          <Collaborators document={document} limit={5} />
-          {abilities.share && (
-            <ShareButton document={document} key="share-button" />
-          )}
-          <Button
-            neutral
-            onClick={() => {
-              window.location.href = document.url;
-            }}
-          >
-            查看文件
-          </Button>
+        <Flex column gap={4}>
+          <Heading as="h2" size="small">
+            {document.title}
+          </Heading>
+          <Text type="tertiary">Kanban · 即時協作</Text>
         </Flex>
+        <HeaderActions gap={8} align="center">
+          <Collaborators document={document} limit={4} />
+          {abilities.share && (
+            <ShareButton document={document} view="kanban" key="share-button" />
+          )}
+          {showDocumentLink && (
+            <Button
+              neutral
+              onClick={() => {
+                const url = document.url.includes("?")
+                  ? `${document.url}&view=document`
+                  : `${document.url}?view=document`;
+                window.location.href = url;
+              }}
+            >
+              查看文件
+            </Button>
+          )}
+        </HeaderActions>
       </Header>
       <DndContext
         sensors={sensors}
@@ -666,13 +922,19 @@ function BoardView({ document, abilities, readOnly }: Props) {
                   strategy={verticalListSortingStrategy}
                 >
                   <ColumnDroppable columnId={column.id}>
-                    {cards.map((card) => (
-                      <SortableCard
-                        key={card.id}
-                        card={card}
-                        onSelect={(c) => setSelectedCard(c)}
-                      />
-                    ))}
+                    {cards.map((card) => {
+                      const cardAssignees = (card.assigneeIds ?? [])
+                        .map((id) => users.get(id))
+                        .filter(Boolean) as User[];
+                      return (
+                        <SortableCard
+                          key={card.id}
+                          card={card}
+                          assignees={cardAssignees}
+                          onSelect={(c) => setSelectedCard(c)}
+                        />
+                      );
+                    })}
                   </ColumnDroppable>
                 </SortableContext>
                 {!readOnly && (
@@ -685,7 +947,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
                               ? addCardInputRef
                               : null
                           }
-                          placeholder="Enter task title..."
+                          placeholder="輸入卡片標題..."
                           value={newCardTitle[column.id] ?? ""}
                           onChange={(ev) =>
                             setNewCardTitle((prev) => ({
@@ -701,10 +963,10 @@ function BoardView({ document, abilities, readOnly }: Props) {
                             onClick={() => void handleAddCard(column)}
                             disabled={!newCardTitle[column.id]?.trim()}
                           >
-                            Add
+                            新增
                           </Button>
                           <Button neutral onClick={handleCancelAddCard}>
-                            Cancel
+                            取消
                           </Button>
                         </AddCardActions>
                       </AddCardForm>
@@ -713,7 +975,7 @@ function BoardView({ document, abilities, readOnly }: Props) {
                         onClick={() => handleStartAddCard(column.id)}
                       >
                         <PlusIcon size={16} />
-                        <span>Add card</span>
+                        <span>新增卡片</span>
                       </AddCardButton>
                     )}
                   </AddCardArea>
@@ -732,7 +994,9 @@ function BoardView({ document, abilities, readOnly }: Props) {
           duration: 200,
           easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
         }}>
-          {activeCard && <CardPreview card={activeCard} />}
+          {activeCard && (
+            <CardPreview card={activeCard} assignees={activeCardAssignees} />
+          )}
         </DragOverlay>
       </DndContext>
 
@@ -747,12 +1011,6 @@ function BoardView({ document, abilities, readOnly }: Props) {
             value={newColumnTitle}
             onChange={(ev) => setNewColumnTitle(ev.target.value)}
             autoFocus
-          />
-          <Input
-            label="顏色 (可選)"
-            value={newColumnColor}
-            onChange={(ev) => setNewColumnColor(ev.target.value)}
-            placeholder="#8e9aa6"
           />
           <Flex gap={8} justify="flex-end">
             <Button neutral onClick={() => setShowColumnModal(false)}>
@@ -774,43 +1032,60 @@ function BoardView({ document, abilities, readOnly }: Props) {
             <ModalMain>
               <ModalTitleInput
                 value={selectedCard.title}
-                onChange={(ev) => (selectedCard.title = ev.target.value)}
-                placeholder="Card title"
+                onChange={(ev) => {
+                  if (readOnly) {
+                    return;
+                  }
+                  selectedCard.title = ev.target.value;
+                }}
+                placeholder="卡片標題"
+                readOnly={readOnly}
               />
               <ModalDescriptionArea
                 value={selectedCard.description ?? ""}
-                onChange={(ev) => (selectedCard.description = ev.target.value)}
-                placeholder="Add a description..."
+                onChange={(ev) => {
+                  if (readOnly) {
+                    return;
+                  }
+                  selectedCard.description = ev.target.value;
+                }}
+                placeholder="加入描述..."
                 rows={6}
+                readOnly={readOnly}
               />
             </ModalMain>
             <ModalSidebar>
               <PropertySection>
-                <PropertyLabel>Assignee</PropertyLabel>
-                <UserSelector
-                  value={selectedCard.assigneeId}
-                  onChange={handleSelectAssignee}
+                <PropertyLabel>Assignees</PropertyLabel>
+                <MultiUserSelector
+                  value={selectedCard.assigneeIds ?? []}
+                  onChange={handleAssigneesChange}
                   users={users.orderedData}
+                  disabled={readOnly}
                 />
               </PropertySection>
               <PropertySection>
                 <PropertyLabel>Tags</PropertyLabel>
-                <TagEditor
+                <TagSelector
+                  boardTags={boardTags}
                   value={selectedCard.tags}
-                  onChange={(tags) => (selectedCard.tags = tags)}
+                  onChange={handleCardTagsChange}
+                  onCreateTag={handleCreateBoardTag}
+                  onDeleteTag={handleDeleteBoardTag}
+                  disabled={readOnly}
                 />
               </PropertySection>
             </ModalSidebar>
             {!readOnly && (
               <ModalFooter>
                 <Button onClick={() => void handleSaveCard(selectedCard)}>
-                  Save changes
+                  儲存變更
                 </Button>
                 <Button
                   onClick={() => void handleDeleteCard(selectedCard)}
                   danger
                 >
-                  Delete card
+                  刪除卡片
                 </Button>
               </ModalFooter>
             )}
@@ -830,6 +1105,12 @@ const Header = styled(Flex)`
   border-bottom: 1px solid ${s("divider")};
 `;
 
+const HeaderActions = styled(Flex)`
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+`;
+
 const Columns = styled.div`
   display: flex;
   gap: 16px;
@@ -838,7 +1119,7 @@ const Columns = styled.div`
 `;
 
 const Column = styled.div`
-  background: ${s("background")};
+  background: ${s("menuBackground")};
   border-radius: 8px;
   min-height: 200px;
   width: 280px;
@@ -993,8 +1274,11 @@ const CardTagRow = styled.div`
 const CardTag = styled.span<{ $color?: string | null }>`
   padding: 1px 6px;
   border-radius: 3px;
-  background: ${s("divider")};
-  color: ${s("textSecondary")};
+  background: ${(props) =>
+    props.$color ? `${props.$color}22` : s("divider")};
+  color: ${(props) => props.$color ?? s("textSecondary")};
+  border: 1px solid
+    ${(props) => (props.$color ? `${props.$color}55` : s("divider"))};
   font-size: 11px;
 `;
 
@@ -1090,7 +1374,7 @@ const AddColumnCard = styled.button`
 `;
 
 const BoardSurface = styled(Scrollable)`
-  background: ${s("sidebarBackground")};
+  background: ${s("background")};
 `;
 
 // Modal styles
@@ -1177,22 +1461,6 @@ const UserSelectorWrapper = styled.div`
   position: relative;
 `;
 
-const UserSelectorTrigger = styled.button`
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid ${s("inputBorder")};
-  border-radius: 4px;
-  background: transparent;
-  color: ${s("text")};
-  cursor: pointer;
-  text-align: left;
-  font-size: 12px;
-
-  &:hover {
-    border-color: ${s("inputBorderFocused")};
-  }
-`;
-
 const UserDropdown = styled.div`
   position: absolute;
   top: 100%;
@@ -1239,5 +1507,162 @@ const UserOption = styled.div<{ $selected?: boolean }>`
 
   &:hover {
     background: ${s("listItemHoverBackground")};
+  }
+`;
+
+const SelectedAssignees = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+`;
+
+const AssigneeChip = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid ${s("divider")};
+  background: ${s("menuBackground")};
+  color: ${s("textSecondary")};
+  cursor: pointer;
+  font-size: 12px;
+
+  &:hover {
+    border-color: ${s("accent")};
+    color: ${s("text")};
+  }
+`;
+
+const ChipClose = styled.span`
+  font-weight: 600;
+  color: ${s("textTertiary")};
+`;
+
+const AssigneeAdd = styled(NudeButton)`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px dashed ${s("divider")};
+  color: ${s("textSecondary")};
+
+  &:hover {
+    border-color: ${s("accent")};
+    color: ${s("text")};
+  }
+`;
+
+const AssigneeRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+`;
+
+const AvatarStack = styled.div`
+  display: flex;
+  align-items: center;
+
+  > * {
+    margin-left: -6px;
+    border: 2px solid ${s("background")};
+  }
+
+  > *:first-child {
+    margin-left: 0;
+  }
+`;
+
+const AssigneeNames = styled.span`
+  font-size: 11px;
+  color: ${s("textSecondary")};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const TagSelectorWrapper = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const TagList = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+`;
+
+const TagChip = styled.button<{ $selected?: boolean; $color?: string | null }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid ${(props) => (props.$selected ? s("accent") : s("divider"))};
+  background: ${(props) =>
+    props.$selected
+      ? `${props.$color ?? s("accent")}1a`
+      : props.$color
+        ? `${props.$color}12`
+        : s("menuBackground")};
+  color: ${(props) => props.$color ?? s("textSecondary")};
+  cursor: pointer;
+  font-size: 12px;
+  transition: border 120ms ease, transform 120ms ease;
+
+  &:hover {
+    border-color: ${s("accent")};
+    transform: translateY(-1px);
+  }
+`;
+
+const ChipActions = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const Dot = styled.span<{ $color?: string | null }>`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: ${(props) => props.$color ?? s("textTertiary")};
+  display: inline-block;
+`;
+
+const TagRemove = styled.button`
+  border: none;
+  background: transparent;
+  color: ${s("textTertiary")};
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+`;
+
+const TagInputRow = styled.div`
+  display: flex;
+  gap: 8px;
+  align-items: center;
+`;
+
+const TagInput = styled.input`
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid ${s("inputBorder")};
+  border-radius: 6px;
+  background: transparent;
+  color: ${s("text")};
+  font-size: 13px;
+
+  &:focus {
+    outline: none;
+    border-color: ${s("accent")};
+  }
+
+  &::placeholder {
+    color: ${s("textTertiary")};
   }
 `;

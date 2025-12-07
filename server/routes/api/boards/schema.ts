@@ -80,7 +80,7 @@ export const BoardCardsCreateSchema = BaseSchema.extend({
       description: z.string().optional(),
       tags: TagSchema.array().optional(),
       metadata: z.record(z.any()).optional(),
-      assigneeId: z.string().uuid().optional().nullable(),
+      assigneeIds: z.array(z.string().uuid()).optional(),
     })
   ),
 });
@@ -92,7 +92,7 @@ export const BoardCardsUpdateSchema = BaseSchema.extend({
     description: z.string().nullable().optional(),
     tags: TagSchema.array().nullable().optional(),
     metadata: z.record(z.any()).nullable().optional(),
-    assigneeId: z.string().uuid().nullable().optional(),
+    assigneeIds: z.array(z.string().uuid()).nullable().optional(),
   }),
 });
 export type BoardCardsUpdateReq = z.infer<typeof BoardCardsUpdateSchema>;
@@ -110,3 +110,10 @@ export const BoardCardsDeleteSchema = BaseSchema.extend({
   body: IdSchema,
 });
 export type BoardCardsDeleteReq = z.infer<typeof BoardCardsDeleteSchema>;
+
+export const BoardsUpdateTagsSchema = BaseSchema.extend({
+  body: IdSchema.extend({
+    tags: TagSchema.array(),
+  }),
+});
+export type BoardsUpdateTagsReq = z.infer<typeof BoardsUpdateTagsSchema>;

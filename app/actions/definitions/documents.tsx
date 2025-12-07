@@ -1415,8 +1415,8 @@ export const enableKanban = createActionV2({
       return false;
     }
     const can = stores.policies.abilities(activeDocumentId);
-    // Only show if user can update and board is not enabled
-    const board = stores.boards.data.get(activeDocumentId);
+    const board = stores.boards
+      .orderedData.find((b) => b.documentId === activeDocumentId);
     return can.update && !board;
   },
   perform: async ({ activeDocumentId, stores, t }) => {
@@ -1430,12 +1430,19 @@ export const enableKanban = createActionV2({
     }
 
     try {
-      await stores.boards.checkEnabled(activeDocumentId);
-      // If board already exists, just navigate
-      const slug = document.url.split("/").pop();
-      history.push(`/kanban/${slug}`);
-    } catch {
-      // Board doesn't exist, create it
+      const existing = await stores.boards.checkEnabled(activeDocumentId);
+      if (existing) {
+        const slug = document.url.split("/").pop();
+        history.push(`/kanban/${slug}`);
+        return;
+      }
+      if (
+        !window.confirm(
+          t("啟用看板後，此文件預設會以看板檢視呈現，確認切換嗎？")
+        )
+      ) {
+        return;
+      }
       const { client } = await import("~/utils/ApiClient");
       await client.post("/boards.enable", {
         documentId: activeDocumentId,
@@ -1443,6 +1450,8 @@ export const enableKanban = createActionV2({
       toast.success(t("看板已啟用"));
       const slug = document.url.split("/").pop();
       history.push(`/kanban/${slug}`);
+    } catch (err) {
+      toast.error(err?.message ?? t("無法啟用看板"));
     }
   },
 });

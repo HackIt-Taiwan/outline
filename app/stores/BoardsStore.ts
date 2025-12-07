@@ -1,5 +1,6 @@
 import invariant from "invariant";
 import { action, runInAction } from "mobx";
+import type { BoardTag } from "@shared/types";
 import Board from "~/models/Board";
 import { RPCAction } from "~/stores/base/Store";
 import { client } from "~/utils/ApiClient";
@@ -48,6 +49,18 @@ export default class BoardsStore extends Store<Board> {
       }
       throw err;
     }
+  }
+
+  @action
+  async updateTags(id: string, tags: BoardTag[]) {
+    const res = await client.post("/boards.updateTags", { id, tags });
+    invariant(res?.data, "Board response missing data");
+
+    return runInAction(() => {
+      const board = this.add(res.data.board ?? res.data);
+      this.addPolicies(res.policies);
+      return board;
+    });
   }
 
   @action

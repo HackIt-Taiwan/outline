@@ -35,9 +35,11 @@ type Props = {
   onRequestClose: () => void;
   /** Whether the popover is visible. */
   visible: boolean;
+  /** Optional view hint for generated link */
+  view?: "kanban" | "document";
 };
 
-function SharePopover({ document, onRequestClose, visible }: Props) {
+function SharePopover({ document, onRequestClose, visible, view }: Props) {
   const team = useCurrentTeam();
   const { t } = useTranslation();
   const can = usePolicy(document);
@@ -339,7 +341,11 @@ function SharePopover({ document, onRequestClose, visible }: Props) {
   ) : (
     <CopyLinkButton
       key="copy-link"
-      url={urlify(documentPath(document))}
+      url={urlify(
+        `${documentPath(document)}${
+          view === "kanban" ? "?view=kanban" : ""
+        }`
+      )}
       onCopy={onRequestClose}
     />
   );

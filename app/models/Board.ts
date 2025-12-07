@@ -32,12 +32,12 @@ class Board extends Model {
   @Relation(() => BoardCard, { onDelete: "cascade" })
   cards?: BoardCard[];
 
+  @observable
+  @Field
+  tags?: BoardTag[] | null;
+
   get searchContent(): string | string[] {
     return [this.title];
-  }
-
-  get tags(): BoardTag[] {
-    return [];
   }
 }
 

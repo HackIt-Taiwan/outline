@@ -44,11 +44,12 @@ class BoardCard extends Model {
   @Field
   index: string;
 
+  @observable
   @Field
-  assigneeId?: string | null;
+  assigneeIds?: string[] | null;
 
-  @Relation(() => User)
-  assignee?: User | null;
+  @Relation(() => User, { multiple: true })
+  assignees?: User[] | null;
 
   @Relation(() => Board, { onDelete: "cascade" })
   board?: Board;

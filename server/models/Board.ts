@@ -43,6 +43,9 @@ class Board extends ParanoidModel<
   @Column(DataType.UUID)
   teamId: string;
 
+  @Column(DataType.JSONB)
+  tags: { id: string; name: string; color?: string | null }[] | null;
+
   @BelongsTo(() => User, "createdById")
   createdBy: User;
 

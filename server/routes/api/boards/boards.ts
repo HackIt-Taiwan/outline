@@ -16,9 +16,9 @@ import { APIContext } from "@server/types";
 import * as T from "./schema";
 
 const DEFAULT_COLUMNS = [
-  { title: "To Do", color: "#8e9aa6" },
-  { title: "Doing", color: "#f5a623" },
-  { title: "Done", color: "#2fb344" },
+  { title: "To Do" },
+  { title: "Doing" },
+  { title: "Done" },
 ];
 
 const router = new Router();
@@ -67,6 +67,17 @@ async function createBoardWithDefaults(ctx: APIContext, document: Document) {
   }
 
   return createdBoard;
+}
+
+async function ensureBoard(
+  ctx: APIContext,
+  document: Document,
+  board?: Board | null
+) {
+  if (board) {
+    return board;
+  }
+  ctx.throw(404, "Board not enabled for this document");
 }
 
 const emitBoardChange = (
@@ -168,6 +179,39 @@ router.post(
     }
 
     const board = await createBoardWithDefaults(ctx, document);
+
+    await emitBoardChange(ctx, document.id, {
+      board: presentBoard(board),
+    });
+
+    ctx.body = {
+      data: presentBoard(board),
+      policies: presentPolicies(user, [document]),
+    };
+  }
+);
+
+router.post(
+  "boards.updateTags",
+  auth(),
+  transaction(),
+  validate(T.BoardsUpdateTagsSchema),
+  async (ctx: APIContext<T.BoardsUpdateTagsReq>) => {
+    const { id, tags } = ctx.input.body;
+    const { user } = ctx.state.auth;
+    const { transaction } = ctx.state;
+
+    const board = await Board.findByPk(id, { transaction, rejectOnEmpty: true });
+    const document = await Document.findByPk(board.documentId, {
+      userId: user.id,
+      transaction,
+      rejectOnEmpty: true,
+    });
+    authorize(user, "update", document);
+
+    board.tags = tags;
+    board.updatedById = user.id;
+    await board.saveWithCtx(ctx, { transaction });
 
     await emitBoardChange(ctx, document.id, {
       board: presentBoard(board),
@@ -399,7 +443,7 @@ router.post(
   validate(T.BoardCardsCreateSchema),
   async (ctx: APIContext<T.BoardCardsCreateReq>) => {
     const { user } = ctx.state.auth;
-    const { documentId, boardId, columnId, title, description, tags, metadata, assigneeId } =
+    const { documentId, boardId, columnId, title, description, tags, metadata, assigneeIds } =
       ctx.input.body;
     const { transaction } = ctx.state;
 
@@ -430,7 +474,7 @@ router.post(
       description,
       tags,
       metadata,
-      assigneeId: assigneeId ?? null,
+      assigneeIds: assigneeIds ?? null,
       index,
       createdById: user.id,
       updatedById: user.id,
@@ -455,7 +499,7 @@ router.post(
   async (ctx: APIContext<T.BoardCardsUpdateReq>) => {
     const { user } = ctx.state.auth;
     const { transaction } = ctx.state;
-    const { id, title, description, tags, metadata, assigneeId } =
+    const { id, title, description, tags, metadata, assigneeIds } =
       ctx.input.body;
 
     const card = await BoardCard.findByPk(id, {
@@ -481,8 +525,8 @@ router.post(
     if (metadata !== undefined) {
       card.metadata = metadata;
     }
-    if (assigneeId !== undefined) {
-      card.assigneeId = assigneeId;
+    if (assigneeIds !== undefined) {
+      card.assigneeIds = assigneeIds;
     }
     card.updatedById = user.id;
     await card.saveWithCtx(ctx, { transaction });
