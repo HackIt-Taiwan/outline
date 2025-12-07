@@ -407,7 +407,20 @@ const SortableCard = ({
     >
       <CardContent>
         <CardTitle>
-          {dueLabel && <DueBadge>{dueLabel}</DueBadge>}
+          {dueLabel && (
+            <DueBadge
+              title={
+                deadline && card.dueOffsetDays != null
+                  ? formatDate(
+                      new Date(deadline.getTime() - card.dueOffsetDays * 86400000),
+                      "yyyy/MM/dd HH:mm"
+                    )
+                  : undefined
+              }
+            >
+              {dueLabel}
+            </DueBadge>
+          )}
           {card.title}
         </CardTitle>
         {card.description && (
@@ -884,11 +897,10 @@ function BoardView({
   };
 
   const formatDueLabel = (offset: number | null | undefined) => {
-    if (!deadline || offset == null) {
+    if (offset == null) {
       return null;
     }
-    const dueDate = new Date(deadline.getTime() - offset * 86400000);
-    return `D-${offset} (${formatDate(dueDate, "yyyy/MM/dd HH:mm")})`;
+    return `D-${offset}`;
   };
 
   const getDueDateValue = (card: BoardCardModel) => {
@@ -1018,10 +1030,10 @@ function BoardView({
       <ViewControls>
         <Popover>
           <PopoverTrigger asChild>
-            <IconButton aria-label="視圖選項">
-              <SettingsIcon size={16} />
-              <span>視圖</span>
-            </IconButton>
+            <GhostViewButton aria-label="視圖與過濾">
+              <SettingsIcon size={14} />
+              視圖 / 過濾
+            </GhostViewButton>
           </PopoverTrigger>
           <PopoverContent width={340} shrink style={{ padding: "10px 16px" }}>
             <Panel>
@@ -1400,8 +1412,8 @@ const CountdownRow = styled(Flex)`
 `;
 
 const ViewControls = styled(Flex)`
-  padding: 8px 20px;
-  justify-content: space-between;
+  padding: 6px 16px 10px;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid ${s("divider")};
@@ -1465,6 +1477,24 @@ const QuietHint = styled.div`
   align-items: center;
   color: ${s("textTertiary")};
   font-size: 12px;
+`;
+
+const GhostViewButton = styled(NudeButton)`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid ${s("divider")};
+  background: ${s("menuBackground")};
+  color: ${s("textSecondary")};
+  font-size: 12px;
+  cursor: var(--pointer);
+
+  &:hover {
+    color: ${s("text")};
+    border-color: ${s("inputBorderFocused")};
+  }
 `;
 
 const Columns = styled.div`
@@ -1975,14 +2005,6 @@ const TagList = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-`;
-
-const IconButton = styled(Button)`
-  padding: 6px 10px;
-  gap: 6px;
-  font-size: 13px;
-  min-width: 0;
-  justify-content: center;
 `;
 
 const CountdownPill = styled.span`
