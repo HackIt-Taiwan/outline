@@ -33,7 +33,9 @@ export default class BoardCardsStore extends Store<BoardCard> {
 
   @action
   removeByDocument(documentId: string) {
-    const cards = this.orderedData.filter((card) => card.documentId === documentId);
+    const cards = this.orderedData.filter(
+      (card) => card.documentId === documentId
+    );
     cards.forEach((card) => this.remove(card.id));
   }
 
@@ -57,6 +59,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
     // Save previous state for rollback
     const previousColumnId = card.columnId;
     const previousIndex = card.index;
+    const previousUpdatedAt = card.updatedAt;
 
     // Optimistic update: calculate new index and update immediately
     const beforeCard = beforeId ? this.get(beforeId) : undefined;
@@ -69,6 +72,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
     runInAction(() => {
       card.columnId = columnId;
       card.index = newIndex;
+      card.updatedAt = new Date();
     });
 
     try {
@@ -89,6 +93,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
       runInAction(() => {
         card.columnId = previousColumnId;
         card.index = previousIndex;
+        card.updatedAt = previousUpdatedAt;
       });
       throw err;
     }
@@ -115,6 +120,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
       tags: card.tags,
       assigneeIds: card.assigneeIds,
       metadata: card.metadata,
+      updatedAt: card.updatedAt,
     };
 
     // Optimistic update
@@ -134,6 +140,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
       if (params.metadata !== undefined) {
         card.metadata = params.metadata;
       }
+      card.updatedAt = new Date();
     });
 
     try {
@@ -143,7 +150,9 @@ export default class BoardCardsStore extends Store<BoardCard> {
         description: params.description,
         tags: params.tags,
         assigneeIds: params.assigneeIds,
-        metadata: params.metadata as Record<string, string | number | boolean | null> | undefined,
+        metadata: params.metadata as
+          | Record<string, string | number | boolean | null>
+          | undefined,
       });
       invariant(res?.data, "Card data missing");
       runInAction(() => {
@@ -159,6 +168,7 @@ export default class BoardCardsStore extends Store<BoardCard> {
         card.tags = previousState.tags;
         card.assigneeIds = previousState.assigneeIds;
         card.metadata = previousState.metadata;
+        card.updatedAt = previousState.updatedAt;
       });
       throw err;
     }

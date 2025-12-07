@@ -184,11 +184,7 @@ const TagSelector = ({
             }
           }}
         />
-        <Button
-          neutral
-          onClick={handleCreate}
-          disabled={!newTagName.trim()}
-        >
+        <Button neutral onClick={handleCreate} disabled={!newTagName.trim()}>
           新增
         </Button>
       </TagInputRow>
@@ -522,9 +518,9 @@ function BoardView({
 
   const activeCard = activeCardId ? boardCards.get(activeCardId) : null;
   const activeCardAssignees = activeCard
-    ? (activeCard.assigneeIds ?? [])
+    ? ((activeCard.assigneeIds ?? [])
         .map((id) => users.get(id))
-        .filter(Boolean) as User[]
+        .filter(Boolean) as User[])
     : [];
 
   // Fetch all users for the assignee selector
@@ -658,6 +654,7 @@ function BoardView({
       assigneeIds: card.assigneeIds ?? [],
       metadata: card.metadata ?? undefined,
     });
+    setSelectedCard(null);
   };
 
   const handleDeleteCard = async (card: BoardCardModel) => {
@@ -990,10 +987,12 @@ function BoardView({
             </AddColumnCard>
           )}
         </Columns>
-        <DragOverlay dropAnimation={{
-          duration: 200,
-          easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
-        }}>
+        <DragOverlay
+          dropAnimation={{
+            duration: 200,
+            easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+          }}
+        >
           {activeCard && (
             <CardPreview card={activeCard} assignees={activeCardAssignees} />
           )}
@@ -1172,7 +1171,7 @@ const ColumnActions = styled.div`
   }
 `;
 
-const ColumnActionButton = styled(NudeButton) <{ $danger?: boolean }>`
+const ColumnActionButton = styled(NudeButton)<{ $danger?: boolean }>`
   width: 24px;
   height: 24px;
   border-radius: 4px;
@@ -1205,10 +1204,14 @@ const CardsArea = styled.div<{ $isOver?: boolean }>`
   flex: 1;
   border-radius: 4px;
   transition: background 100ms ease;
-  background: ${(props) => (props.$isOver ? `${s("accent")}08` : "transparent")};
+  background: ${(props) =>
+    props.$isOver ? `${s("accent")}08` : "transparent"};
 `;
 
-const CardShell = styled.div<{ $isDragging?: boolean; $isDragOverlay?: boolean }>`
+const CardShell = styled.div<{
+  $isDragging?: boolean;
+  $isDragOverlay?: boolean;
+}>`
   padding: 10px 12px;
   margin-bottom: 6px;
   cursor: grab;
@@ -1274,8 +1277,7 @@ const CardTagRow = styled.div`
 const CardTag = styled.span<{ $color?: string | null }>`
   padding: 1px 6px;
   border-radius: 3px;
-  background: ${(props) =>
-    props.$color ? `${props.$color}22` : s("divider")};
+  background: ${(props) => (props.$color ? `${props.$color}22` : s("divider"))};
   color: ${(props) => props.$color ?? s("textSecondary")};
   border: 1px solid
     ${(props) => (props.$color ? `${props.$color}55` : s("divider"))};
@@ -1364,7 +1366,10 @@ const AddColumnCard = styled.button`
   justify-content: center;
   gap: 8px;
   cursor: var(--pointer);
-  transition: border 120ms ease, transform 120ms ease, color 120ms ease;
+  transition:
+    border 120ms ease,
+    transform 120ms ease,
+    color 120ms ease;
 
   &:hover {
     border-color: ${s("accent")};
@@ -1503,7 +1508,8 @@ const UserOption = styled.div<{ $selected?: boolean }>`
   gap: 8px;
   padding: 6px 10px;
   cursor: pointer;
-  background: ${(props) => (props.$selected ? s("menuItemSelected") : "transparent")};
+  background: ${(props) =>
+    props.$selected ? s("menuItemSelected") : "transparent"};
 
   &:hover {
     background: ${s("listItemHoverBackground")};
@@ -1615,7 +1621,9 @@ const TagChip = styled.button<{ $selected?: boolean; $color?: string | null }>`
   color: ${(props) => props.$color ?? s("textSecondary")};
   cursor: pointer;
   font-size: 12px;
-  transition: border 120ms ease, transform 120ms ease;
+  transition:
+    border 120ms ease,
+    transform 120ms ease;
 
   &:hover {
     border-color: ${s("accent")};
