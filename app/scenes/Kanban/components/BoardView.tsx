@@ -975,7 +975,7 @@ function BoardView({
                 更多
               </Button>
             </PopoverTrigger>
-            <PopoverContent width={300} shrink>
+            <PopoverContent width={280} shrink>
               <Panel>
                 <PanelHeader>
                   <Text weight="bold">截止時間</Text>
@@ -995,6 +995,7 @@ function BoardView({
                     }
                   }}
                   disabled={readOnly}
+                  style={{ width: "100%", fontSize: 12 }}
                 />
               </Panel>
             </PopoverContent>
@@ -1022,7 +1023,7 @@ function BoardView({
               <span>視圖</span>
             </IconButton>
           </PopoverTrigger>
-          <PopoverContent width={360} shrink>
+          <PopoverContent width={340} shrink style={{ padding: "10px 16px" }}>
             <Panel>
               <PanelHeader>
                 <Text weight="bold">排序</Text>
@@ -1411,7 +1412,7 @@ const Panel = styled.div`
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 0;
+  padding: 12px 4px;
 
   &:not(:last-child) {
     border-bottom: 1px solid ${s("divider")};
@@ -1980,6 +1981,8 @@ const IconButton = styled(Button)`
   padding: 6px 10px;
   gap: 6px;
   font-size: 13px;
+  min-width: 0;
+  justify-content: center;
 `;
 
 const CountdownPill = styled.span`
