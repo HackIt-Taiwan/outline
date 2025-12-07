@@ -13,7 +13,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { observer } from "mobx-react";
-import { EditIcon, TrashIcon, PlusIcon } from "outline-icons";
+import { EditIcon, TrashIcon, PlusIcon, SettingsIcon } from "outline-icons";
 import { runInAction } from "mobx";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import styled, { css } from "styled-components";
@@ -39,6 +39,11 @@ import useCurrentUser from "~/hooks/useCurrentUser";
 import { s } from "@shared/styles";
 import { v4 as uuidv4 } from "uuid";
 import { format as formatDate } from "date-fns";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "~/components/primitives/Popover";
 
 // Helper function to truncate text
 const truncateText = (text: string, maxLength: number = 80) => {
@@ -987,67 +992,92 @@ function BoardView({
           )}
         </HeaderActions>
       </Header>
-      <Toolbar>
-        <ToolbarGroup>
-          <Text type="tertiary" size="small">
-            排序
-          </Text>
-          <SelectInput
-            value={sortMode}
-            onChange={(ev) =>
-              setSortMode(ev.target.value as typeof sortMode)
-            }
-          >
-            <option value="manual">自由排序</option>
-            <option value="name">名稱</option>
-            <option value="dueAsc">倒數時間（近）</option>
-            <option value="dueDesc">倒數時間（久）</option>
-          </SelectInput>
-        </ToolbarGroup>
-        <ToolbarGroup>
-          <Text type="tertiary" size="small">
-            Tag 過濾
-          </Text>
-          <TagFilterRow>
-            <SelectInput
-              value={filterMode}
-              onChange={(ev) =>
-                setFilterMode(ev.target.value as typeof filterMode)
-              }
-            >
-              <option value="any">符合任一</option>
-              <option value="all">符合全部</option>
-            </SelectInput>
-            <TagList>
-              {boardTags.map((tag) => {
-                const selected = filterTagIds.includes(tag.id);
-                return (
-                  <TagChip
-                    key={tag.id}
-                    $selected={selected}
-                    $color={tag.color}
-                    onClick={() => {
-                      setFilterTagIds((prev) =>
-                        prev.includes(tag.id)
-                          ? prev.filter((id) => id !== tag.id)
-                          : [...prev, tag.id]
-                      );
-                    }}
-                  >
-                    <span>{tag.name}</span>
-                    <Dot $color={tag.color} />
-                  </TagChip>
-                );
-              })}
-              {filterTagIds.length > 0 && (
-                <ClearFilter onClick={() => setFilterTagIds([])}>
-                  清除
+      <ViewControls>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button neutral icon={<SettingsIcon />}>
+              視圖選項
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent width={420} shrink>
+            <Panel>
+              <PanelHeader>
+                <Text weight="bold">排序</Text>
+                <Text type="tertiary" size="small">
+                  應用於所有分類
+                </Text>
+              </PanelHeader>
+              <SelectInput
+                value={sortMode}
+                onChange={(ev) => setSortMode(ev.target.value as typeof sortMode)}
+              >
+                <option value="manual">自由排序</option>
+                <option value="name">名稱</option>
+                <option value="dueAsc">倒數時間（近）</option>
+                <option value="dueDesc">倒數時間（久）</option>
+              </SelectInput>
+            </Panel>
+            <Panel>
+              <PanelHeader>
+                <Text weight="bold">Tag 過濾</Text>
+                <Text type="tertiary" size="small">
+                  {filterTagIds.length ? `${filterTagIds.length} 個已選` : "未啟用"}
+                </Text>
+              </PanelHeader>
+              <TagFilterRow>
+                <SelectInput
+                  value={filterMode}
+                  onChange={(ev) =>
+                    setFilterMode(ev.target.value as typeof filterMode)
+                  }
+                >
+                  <option value="any">符合任一</option>
+                  <option value="all">符合全部</option>
+                </SelectInput>
+                <ClearFilter
+                  onClick={() => setFilterTagIds([])}
+                  disabled={filterTagIds.length === 0}
+                >
+                  重置
                 </ClearFilter>
-              )}
-            </TagList>
-          </TagFilterRow>
-        </ToolbarGroup>
-      </Toolbar>
+              </TagFilterRow>
+              <TagList>
+                {boardTags.map((tag) => {
+                  const selected = filterTagIds.includes(tag.id);
+                  return (
+                    <TagChip
+                      key={tag.id}
+                      $selected={selected}
+                      $color={tag.color}
+                      onClick={() => {
+                        setFilterTagIds((prev) =>
+                          prev.includes(tag.id)
+                            ? prev.filter((id) => id !== tag.id)
+                            : [...prev, tag.id]
+                        );
+                      }}
+                    >
+                      <span>{tag.name}</span>
+                      <Dot $color={tag.color} />
+                    </TagChip>
+                  );
+                })}
+                {boardTags.length === 0 && (
+                  <Text type="tertiary" size="small">
+                    尚未有標籤
+                  </Text>
+                )}
+              </TagList>
+            </Panel>
+          </PopoverContent>
+        </Popover>
+        {(filterTagIds.length > 0 || sortMode !== "manual") && (
+          <QuietHint>
+            {sortMode !== "manual" && <span>排序：{sortMode}</span>}
+            {filterTagIds.length > 0 && <span>Tag 過濾</span>}
+          </QuietHint>
+        )}
+      </ViewControls>
       <DndContext
         sensors={sensors}
         onDragStart={handleDragStart}
@@ -1345,18 +1375,31 @@ const CountdownRow = styled(Flex)`
   flex-wrap: wrap;
 `;
 
-const Toolbar = styled(Flex)`
+const ViewControls = styled(Flex)`
+  padding: 8px 20px;
+  justify-content: space-between;
   align-items: center;
-  gap: 20px;
-  padding: 8px 20px 4px;
+  gap: 8px;
   border-bottom: 1px solid ${s("divider")};
   flex-wrap: wrap;
 `;
 
-const ToolbarGroup = styled(Flex)`
-  gap: 8px;
+const Panel = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid ${s("divider")};
+  }
+`;
+
+const PanelHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 8px;
 `;
 
 const SelectInput = styled.select`
@@ -1390,6 +1433,14 @@ const ClearFilter = styled.button`
   &:hover {
     color: ${s("text")};
   }
+`;
+
+const QuietHint = styled.div`
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: ${s("textTertiary")};
+  font-size: 12px;
 `;
 
 const Columns = styled.div`
