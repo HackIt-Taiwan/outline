@@ -1566,12 +1566,16 @@ const AvatarStack = styled.div`
   align-items: center;
 
   > * {
-    margin-left: -6px;
+    position: relative;
+    margin-left: -8px;
     border: 2px solid ${s("background")};
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    z-index: 1;
   }
 
   > *:first-child {
     margin-left: 0;
+    z-index: 2;
   }
 `;
 

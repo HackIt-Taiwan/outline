@@ -262,17 +262,51 @@ class WebsocketProvider extends Component<Props> {
       "boards.change",
       action(
         (event: {
-          board?: PartialExcept<any, "id">;
-          columns?: any[];
-          cards?: any[];
+          board?: PartialExcept<any, "id" | "updatedAt">;
+          columns?: Array<PartialExcept<any, "id" | "updatedAt">>;
+          cards?: Array<PartialExcept<any, "id" | "updatedAt">>;
           deletedColumnIds?: string[];
           deletedCardIds?: string[];
           documentId?: string;
           actorId?: string;
         }) => {
-          event.board && this.props.boards.add(event.board);
-          event.columns?.forEach(this.props.boardColumns.add);
-          event.cards?.forEach(this.props.boardCards.add);
+          const shouldAccept = (
+            existing: { updatedAt?: string | Date },
+            incoming?: { updatedAt?: string | Date }
+          ) => {
+            if (!incoming?.updatedAt) {
+              return true;
+            }
+            if (!existing?.updatedAt) {
+              return true;
+            }
+            return (
+              new Date(incoming.updatedAt).getTime() >=
+              new Date(existing.updatedAt).getTime()
+            );
+          };
+
+          if (event.board) {
+            const existing = this.props.boards.get(event.board.id);
+            if (shouldAccept(existing ?? {}, event.board)) {
+              this.props.boards.add(event.board);
+            }
+          }
+
+          event.columns?.forEach((column) => {
+            const existing = this.props.boardColumns.get(column.id);
+            if (shouldAccept(existing ?? {}, column)) {
+              this.props.boardColumns.add(column);
+            }
+          });
+
+          event.cards?.forEach((card) => {
+            const existing = this.props.boardCards.get(card.id);
+            if (shouldAccept(existing ?? {}, card)) {
+              this.props.boardCards.add(card);
+            }
+          });
+
           event.deletedColumnIds?.forEach((id) =>
             this.props.boardColumns.remove(id)
           );
