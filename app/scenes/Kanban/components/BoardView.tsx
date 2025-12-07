@@ -519,6 +519,9 @@ function BoardView({
     null
   );
   const [deadlineInput, setDeadlineInput] = useState<string>("");
+  const [sortMode, setSortMode] = useState<"manual" | "name" | "dueAsc" | "dueDesc">("manual");
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
+  const [filterMode, setFilterMode] = useState<"any" | "all">("any");
   const addCardInputRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -877,6 +880,50 @@ function BoardView({
     return `D-${offset} (${formatDate(dueDate, "yyyy/MM/dd HH:mm")})`;
   };
 
+  const getDueDateValue = (card: BoardCardModel) => {
+    if (!deadline || card.dueOffsetDays == null) {
+      return null;
+    }
+    return new Date(deadline.getTime() - card.dueOffsetDays * 86400000);
+  };
+
+  const filteredAndSortedCards = useCallback(
+    (columnId: string) => {
+      const base = boardCards.inColumn(columnId);
+      const filtered = filterTagIds.length
+        ? base.filter((card) => {
+            const cardTagIds = (card.tags ?? []).map((t) => t.id);
+            if (!cardTagIds.length) {
+              return false;
+            }
+            return filterMode === "any"
+              ? filterTagIds.some((id) => cardTagIds.includes(id))
+              : filterTagIds.every((id) => cardTagIds.includes(id));
+          })
+        : base;
+
+      const sorted = [...filtered].sort((a, b) => {
+        if (sortMode === "name") {
+          const name = a.title.localeCompare(b.title, undefined, {
+            sensitivity: "base",
+          });
+          if (name !== 0) {
+            return name;
+          }
+        } else if (sortMode === "dueAsc" || sortMode === "dueDesc") {
+          const dueA = getDueDateValue(a)?.getTime() ?? Infinity;
+          const dueB = getDueDateValue(b)?.getTime() ?? Infinity;
+          if (dueA !== dueB) {
+            return sortMode === "dueAsc" ? dueA - dueB : dueB - dueA;
+          }
+        }
+        return a.index.localeCompare(b.index);
+      });
+      return sorted;
+    },
+    [boardCards, filterMode, filterTagIds, getDueDateValue, sortMode, deadline]
+  );
+
   if (isLoading || !boardId) {
     return (
       <LoadingWrap>
@@ -940,6 +987,67 @@ function BoardView({
           )}
         </HeaderActions>
       </Header>
+      <Toolbar>
+        <ToolbarGroup>
+          <Text type="tertiary" size="small">
+            排序
+          </Text>
+          <SelectInput
+            value={sortMode}
+            onChange={(ev) =>
+              setSortMode(ev.target.value as typeof sortMode)
+            }
+          >
+            <option value="manual">自由排序</option>
+            <option value="name">名稱</option>
+            <option value="dueAsc">倒數時間（近）</option>
+            <option value="dueDesc">倒數時間（久）</option>
+          </SelectInput>
+        </ToolbarGroup>
+        <ToolbarGroup>
+          <Text type="tertiary" size="small">
+            Tag 過濾
+          </Text>
+          <TagFilterRow>
+            <SelectInput
+              value={filterMode}
+              onChange={(ev) =>
+                setFilterMode(ev.target.value as typeof filterMode)
+              }
+            >
+              <option value="any">符合任一</option>
+              <option value="all">符合全部</option>
+            </SelectInput>
+            <TagList>
+              {boardTags.map((tag) => {
+                const selected = filterTagIds.includes(tag.id);
+                return (
+                  <TagChip
+                    key={tag.id}
+                    $selected={selected}
+                    $color={tag.color}
+                    onClick={() => {
+                      setFilterTagIds((prev) =>
+                        prev.includes(tag.id)
+                          ? prev.filter((id) => id !== tag.id)
+                          : [...prev, tag.id]
+                      );
+                    }}
+                  >
+                    <span>{tag.name}</span>
+                    <Dot $color={tag.color} />
+                  </TagChip>
+                );
+              })}
+              {filterTagIds.length > 0 && (
+                <ClearFilter onClick={() => setFilterTagIds([])}>
+                  清除
+                </ClearFilter>
+              )}
+            </TagList>
+          </TagFilterRow>
+        </ToolbarGroup>
+      </Toolbar>
       <DndContext
         sensors={sensors}
         onDragStart={handleDragStart}
@@ -947,7 +1055,7 @@ function BoardView({
       >
         <Columns>
           {columns.map((column) => {
-            const cards = boardCards.inColumn(column.id);
+            const cards = filteredAndSortedCards(column.id);
             const isEditing = editingColumnId === column.id;
             const isAddingCard = addingCardColumnId === column.id;
             return (
@@ -1235,6 +1343,53 @@ const CountdownRow = styled(Flex)`
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+`;
+
+const Toolbar = styled(Flex)`
+  align-items: center;
+  gap: 20px;
+  padding: 8px 20px 4px;
+  border-bottom: 1px solid ${s("divider")};
+  flex-wrap: wrap;
+`;
+
+const ToolbarGroup = styled(Flex)`
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+`;
+
+const SelectInput = styled.select`
+  height: 32px;
+  padding: 4px 8px;
+  border: 1px solid ${s("inputBorder")};
+  border-radius: 6px;
+  background: ${s("menuBackground")};
+  color: ${s("text")};
+  font-size: 13px;
+
+  &:focus {
+    outline: none;
+    border-color: ${s("accent")};
+  }
+`;
+
+const TagFilterRow = styled(Flex)`
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+`;
+
+const ClearFilter = styled.button`
+  border: none;
+  background: transparent;
+  color: ${s("textTertiary")};
+  cursor: pointer;
+  font-size: 12px;
+
+  &:hover {
+    color: ${s("text")};
+  }
 `;
 
 const Columns = styled.div`
