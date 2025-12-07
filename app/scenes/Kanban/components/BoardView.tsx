@@ -13,7 +13,13 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { observer } from "mobx-react";
-import { EditIcon, TrashIcon, PlusIcon, SettingsIcon } from "outline-icons";
+import {
+  EditIcon,
+  TrashIcon,
+  PlusIcon,
+  SettingsIcon,
+  MoreIcon,
+} from "outline-icons";
 import { runInAction } from "mobx";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import styled, { css } from "styled-components";
@@ -955,21 +961,7 @@ function BoardView({
           </Heading>
           <CountdownRow>
             <Text type="tertiary">專案截止：</Text>
-            <Text weight="bold">{countdown}</Text>
-            <Input
-              type="datetime-local"
-              value={deadlineInput}
-              onChange={(e) => setDeadlineInput(e.target.value)}
-              onBlur={handleSaveDeadline}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void handleSaveDeadline();
-                }
-              }}
-              style={{ width: 210 }}
-              disabled={readOnly}
-            />
+            <CountdownPill>{countdown}</CountdownPill>
           </CountdownRow>
         </Flex>
         <HeaderActions gap={8} align="center">
@@ -977,6 +969,36 @@ function BoardView({
           {abilities.share && (
             <ShareButton document={document} view="kanban" key="share-button" />
           )}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button neutral icon={<MoreIcon />} aria-label="更多">
+                更多
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent width={300} shrink>
+              <Panel>
+                <PanelHeader>
+                  <Text weight="bold">截止時間</Text>
+                  <Text type="tertiary" size="small">
+                    影響倒數與 D-Day
+                  </Text>
+                </PanelHeader>
+                <Input
+                  type="datetime-local"
+                  value={deadlineInput}
+                  onChange={(e) => setDeadlineInput(e.target.value)}
+                  onBlur={handleSaveDeadline}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleSaveDeadline();
+                    }
+                  }}
+                  disabled={readOnly}
+                />
+              </Panel>
+            </PopoverContent>
+          </Popover>
           {showDocumentLink && (
             <Button
               neutral
@@ -995,11 +1017,12 @@ function BoardView({
       <ViewControls>
         <Popover>
           <PopoverTrigger asChild>
-            <Button neutral icon={<SettingsIcon />}>
-              視圖選項
-            </Button>
+            <IconButton aria-label="視圖選項">
+              <SettingsIcon size={16} />
+              <span>視圖</span>
+            </IconButton>
           </PopoverTrigger>
-          <PopoverContent width={420} shrink>
+          <PopoverContent width={360} shrink>
             <Panel>
               <PanelHeader>
                 <Text weight="bold">排序</Text>
@@ -1034,12 +1057,12 @@ function BoardView({
                   <option value="any">符合任一</option>
                   <option value="all">符合全部</option>
                 </SelectInput>
-                <ClearFilter
+                <GhostLink
                   onClick={() => setFilterTagIds([])}
                   disabled={filterTagIds.length === 0}
                 >
-                  重置
-                </ClearFilter>
+                  清除
+                </GhostLink>
               </TagFilterRow>
               <TagList>
                 {boardTags.map((tag) => {
@@ -1951,6 +1974,34 @@ const TagList = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+`;
+
+const IconButton = styled(Button)`
+  padding: 6px 10px;
+  gap: 6px;
+  font-size: 13px;
+`;
+
+const CountdownPill = styled.span`
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: ${s("menuBackground")};
+  border: 1px solid ${s("divider")};
+  font-weight: 600;
+  color: ${s("textSecondary")};
+`;
+
+const GhostLink = styled.button<{ disabled?: boolean }>`
+  border: none;
+  background: transparent;
+  color: ${(p) => (p.disabled ? s("textTertiary") : s("textSecondary"))};
+  cursor: ${(p) => (p.disabled ? "default" : "pointer")};
+  font-size: 12px;
+  padding: 4px 6px;
+
+  &:hover {
+    color: ${(p) => (p.disabled ? s("textTertiary") : s("text"))};
+  }
 `;
 
 const TagChip = styled.button<{ $selected?: boolean; $color?: string | null }>`
