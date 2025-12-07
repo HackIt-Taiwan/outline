@@ -1006,16 +1006,20 @@ function BoardView({
                   type="datetime-local"
                   value={deadlineInput}
                   onChange={(e) => setDeadlineInput(e.target.value)}
-                  onBlur={handleSaveDeadline}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void handleSaveDeadline();
-                    }
-                  }}
                   disabled={readOnly}
                   style={{ width: "100%", fontSize: 12 }}
                 />
+                {!readOnly && (
+                  <Flex justify="flex-end">
+                    <Button
+                      small
+                      onClick={() => void handleSaveDeadline()}
+                      disabled={readOnly}
+                    >
+                      確認更改
+                    </Button>
+                  </Flex>
+                )}
               </Panel>
             </PopoverContent>
           </Popover>
@@ -1372,9 +1376,10 @@ function BoardView({
                   onBlur={() => void handleSaveCard(selectedCard)}
                   readOnly={readOnly}
                 />
-                {formatDueLabel(selectedCard.dueOffsetDays) && deadline && (
+                {deadline && (
                   <Text type="tertiary" size="small">
-                    到期：{formatDueLabel(selectedCard.dueOffsetDays)}
+                    到期：
+                    {formatDueTooltip(selectedCard.dueOffsetDays) ?? "未設定"}
                   </Text>
                 )}
               </PropertySection>
@@ -1496,7 +1501,7 @@ const GhostViewButton = styled(NudeButton)`
   border-radius: 10px;
   border: 1px solid ${s("divider")};
   background: ${s("menuBackground")};
-  color: ${s("textSecondary")};
+  color: ${s("text")};
   font-size: 12px;
   cursor: var(--pointer);
   svg {
@@ -1955,7 +1960,7 @@ const AssigneeAdd = styled(NudeButton)`
   padding: 4px 10px;
   border-radius: 8px;
   border: 1px dashed ${s("divider")};
-  color: ${s("textSecondary")};
+  color: ${s("text")};
   svg {
     fill: currentColor;
   }
