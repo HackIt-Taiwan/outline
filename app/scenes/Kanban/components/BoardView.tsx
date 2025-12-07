@@ -369,6 +369,7 @@ type SortableCardProps = {
   isDragOverlay?: boolean;
   assignees: User[];
   dueLabel?: string | null;
+  dueTooltip?: string | null;
 };
 
 const SortableCard = ({
@@ -377,6 +378,7 @@ const SortableCard = ({
   assignees,
   isDragOverlay,
   dueLabel,
+  dueTooltip,
 }: SortableCardProps) => {
   const {
     attributes,
@@ -409,14 +411,7 @@ const SortableCard = ({
         <CardTitle>
           {dueLabel && (
             <DueBadge
-              title={
-                deadline && card.dueOffsetDays != null
-                  ? formatDate(
-                      new Date(deadline.getTime() - card.dueOffsetDays * 86400000),
-                      "yyyy/MM/dd HH:mm"
-                    )
-                  : undefined
-              }
+              title={dueTooltip ?? undefined}
             >
               {dueLabel}
             </DueBadge>
@@ -472,15 +467,17 @@ const CardPreview = ({
   card,
   assignees,
   dueLabel,
+  dueTooltip,
 }: {
   card: BoardCardModel;
   assignees: User[];
   dueLabel?: string | null;
+  dueTooltip?: string | null;
 }) => (
   <CardShell $isDragOverlay>
     <CardContent>
       <CardTitle>
-        {dueLabel && <DueBadge>{dueLabel}</DueBadge>}
+        {dueLabel && <DueBadge title={dueTooltip ?? undefined}>{dueLabel}</DueBadge>}
         {card.title}
       </CardTitle>
       {card.description && (
@@ -903,6 +900,16 @@ function BoardView({
     return `D-${offset}`;
   };
 
+  const formatDueTooltip = (offset: number | null | undefined) => {
+    if (!deadline || offset == null) {
+      return null;
+    }
+    return formatDate(
+      new Date(deadline.getTime() - offset * 86400000),
+      "yyyy/MM/dd HH:mm"
+    );
+  };
+
   const getDueDateValue = (card: BoardCardModel) => {
     if (!deadline || card.dueOffsetDays == null) {
       return null;
@@ -1121,11 +1128,11 @@ function BoardView({
       >
         <Columns>
           {columns.map((column) => {
-            const cards = filteredAndSortedCards(column.id);
-            const isEditing = editingColumnId === column.id;
-            const isAddingCard = addingCardColumnId === column.id;
-            return (
-              <Column key={column.id}>
+                    const cards = filteredAndSortedCards(column.id);
+                    const isEditing = editingColumnId === column.id;
+                    const isAddingCard = addingCardColumnId === column.id;
+                    return (
+                      <Column key={column.id}>
                 <ColumnHeader>
                   <ColumnHeaderLeft>
                     {isEditing ? (
@@ -1189,12 +1196,14 @@ function BoardView({
                         .map((id) => users.get(id))
                         .filter(Boolean) as User[];
                       const dueLabel = formatDueLabel(card.dueOffsetDays);
+                      const dueTooltip = formatDueTooltip(card.dueOffsetDays);
                       return (
                         <SortableCard
                           key={card.id}
                           card={card}
                           assignees={cardAssignees}
                           dueLabel={dueLabel}
+                          dueTooltip={dueTooltip}
                           onSelect={(c) => setSelectedCard(c)}
                         />
                       );
