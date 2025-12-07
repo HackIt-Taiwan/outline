@@ -1499,6 +1499,9 @@ const GhostViewButton = styled(NudeButton)`
   color: ${s("textSecondary")};
   font-size: 12px;
   cursor: var(--pointer);
+  svg {
+    fill: currentColor;
+  }
 
   &:hover {
     color: ${s("text")};
@@ -1953,6 +1956,9 @@ const AssigneeAdd = styled(NudeButton)`
   border-radius: 8px;
   border: 1px dashed ${s("divider")};
   color: ${s("textSecondary")};
+  svg {
+    fill: currentColor;
+  }
 
   &:hover {
     border-color: ${s("accent")};
