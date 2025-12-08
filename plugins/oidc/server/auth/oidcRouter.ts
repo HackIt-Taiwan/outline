@@ -49,8 +49,9 @@ async function fetchPassportProfile(email: string) {
     return null;
   }
 
-  const baseUrl = env.PASSPORT_API_BASE_URL.replace(/\/$/, "");
-  const url = `${baseUrl}/services/profile-by-email?email=${encodeURIComponent(email)}`;
+  const baseUrl = env.PASSPORT_API_BASE_URL.replace(/\/+$/, "");
+  const baseUrlWithApi = /\/api$/i.test(baseUrl) ? baseUrl : `${baseUrl}/api`;
+  const url = `${baseUrlWithApi}/services/profile-by-email?email=${encodeURIComponent(email)}`;
 
   try {
     const response = await fetch(url, {
@@ -66,6 +67,7 @@ async function fetchPassportProfile(email: string) {
       Logger.warn("Passport profile lookup failed", {
         email,
         status: response.status,
+        url,
       });
       return null;
     }
@@ -250,15 +252,10 @@ export function createOIDCRouter(
             );
           }
 
-          // Only accept avatar returned by Passport. Reject invalid formats.
-          const avatarUrl = passportProfile.avatar_url;
-          if (!avatarUrl) {
-            failWithPassportProfileError(
-              `Passport profile for ${email} is missing an avatar.`
-            );
-          }
-
-          if (isBase64Url(avatarUrl)) {
+          // Only accept avatar returned by Passport. Reject invalid formats,
+          // but allow falling back to the default avatar if none is provided.
+          let avatarUrl = passportProfile.avatar_url ?? null;
+          if (avatarUrl && isBase64Url(avatarUrl)) {
             failWithPassportProfileError(
               `Passport avatar for ${email} is invalid.`
             );
