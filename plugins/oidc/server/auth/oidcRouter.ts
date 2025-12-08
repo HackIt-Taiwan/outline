@@ -1,8 +1,5 @@
-import passport from "@outlinewiki/koa-passport";
-import JWT from "jsonwebtoken";
 import type { Context } from "koa";
 import Router from "koa-router";
-import get from "lodash/get";
 import { slugifyDomain } from "@shared/utils/domains";
 import { parseEmail } from "@shared/utils/email";
 import { isBase64Url } from "@shared/utils/urls";
@@ -14,19 +11,16 @@ import {
 } from "@server/errors";
 import Logger from "@server/logging/Logger";
 import UploadUserAvatarTask from "@server/queues/tasks/UploadUserAvatarTask";
-import passportMiddleware from "@server/middlewares/passport";
-import { AuthenticationProvider, User } from "@server/models";
-import { AuthenticationResult } from "@server/types";
+import { AuthenticationProvider } from "@server/models";
 import fetch from "@server/utils/fetch";
+import { signIn } from "@server/utils/authentication";
 import {
   StateStore,
   getTeamFromContext,
   getClientFromContext,
-  request,
 } from "@server/utils/passport";
 import config from "../../plugin.json";
 import env from "../env";
-import { OIDCStrategy } from "./OIDCStrategy";
 import { createContext } from "@server/context";
 
 const PASSPORT_ALLOWED_FIELDS = new Set([
@@ -37,9 +31,9 @@ const PASSPORT_ALLOWED_FIELDS = new Set([
 ]);
 
 export interface OIDCEndpoints {
-  authorizationURL: string;
-  tokenURL: string;
-  userInfoURL: string;
+  authorizationURL?: string;
+  tokenURL?: string;
+  userInfoURL?: string;
   logoutURL?: string;
   pkce?: boolean;
 }
@@ -55,7 +49,7 @@ type PassportProfile = {
 
 type PassportConsentClient = {
   client_id: string;
-  name: string;
+  name?: string;
   redirect_uris: string[];
   allowed_fields?: string[];
 };
@@ -94,9 +88,8 @@ const getPassportClient = (): PassportConsentClient | null => {
 
 const buildRequestedFields = (client?: PassportConsentClient) => {
   const clientAllowed = client?.allowed_fields ?? [];
-  const requested = (clientAllowed.length
-    ? clientAllowed
-    : Array.from(PASSPORT_ALLOWED_FIELDS)
+  const requested = (
+    clientAllowed.length ? clientAllowed : Array.from(PASSPORT_ALLOWED_FIELDS)
   ).filter((field) => PASSPORT_ALLOWED_FIELDS.has(field));
 
   for (const required of ["email", "nickname", "avatar_url"]) {
@@ -108,7 +101,7 @@ const buildRequestedFields = (client?: PassportConsentClient) => {
   return requested;
 };
 
-async function fetchPassportProfile(accessToken: string) {
+const requestConsent = async (stateToken?: string) => {
   const baseUrlWithApi = getPassportApiBaseUrl();
   const passportClient = getPassportClient();
 
@@ -118,16 +111,7 @@ async function fetchPassportProfile(accessToken: string) {
     );
   }
 
-  const requestBody = {
-    client_id: passportClient.client_id,
-    redirect_uri: passportClient.redirect_uris?.[0],
-    fields: buildRequestedFields(passportClient),
-  };
-
   const consentRequestUrl = `${baseUrlWithApi}/services/consent/request`;
-  const consentDecisionUrl = `${consentRequestUrl}/`;
-  const consentTokenUrl = `${baseUrlWithApi}/services/consent/token`;
-
   const headers = {
     "X-API-Token": env.PASSPORT_API_TOKEN,
     Accept: "application/json",
@@ -138,14 +122,23 @@ async function fetchPassportProfile(accessToken: string) {
     method: "POST",
     allowPrivateIPAddress: true,
     headers,
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify({
+      client_id: passportClient.client_id,
+      redirect_uri: passportClient.redirect_uris?.[0],
+      fields: buildRequestedFields(passportClient),
+      state: stateToken,
+    }),
   });
 
   if (!requestRes.ok) {
-    Logger.error("Passport consent request failed", new Error("Consent request failed"), {
-      status: requestRes.status,
-      body: await requestRes.text().catch(() => undefined),
-    });
+    Logger.error(
+      "Passport consent request failed",
+      new Error("Consent request failed"),
+      {
+        status: requestRes.status,
+        body: await requestRes.text().catch(() => undefined),
+      }
+    );
     throw AuthenticationError("Failed to initiate Passport consent flow");
   }
 
@@ -154,46 +147,38 @@ async function fetchPassportProfile(accessToken: string) {
     consent_url?: string;
   };
 
-  if (!requestData?.request_id) {
-    throw AuthenticationError("Passport consent request did not return a request_id");
-  }
-
-  const decisionRes = await fetch(
-    `${consentDecisionUrl}${encodeURIComponent(requestData.request_id)}/decision`,
-    {
-      method: "POST",
-      allowPrivateIPAddress: true,
-      headers: {
-        ...headers,
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ decision: "approve" }),
-    }
-  );
-
-  if (!decisionRes.ok) {
-    Logger.error(
-      "Passport consent decision failed",
-      new Error("Consent decision failed"),
-      {
-        status: decisionRes.status,
-        body: await decisionRes.text().catch(() => undefined),
-      }
+  if (!requestData?.request_id || !requestData.consent_url) {
+    throw AuthenticationError(
+      "Passport consent request did not return request_id/consent_url"
     );
-    throw AuthenticationError("Failed to approve Passport consent");
   }
 
-  const decisionData = (await decisionRes.json()) as { code?: string };
-  if (!decisionData?.code) {
-    throw AuthenticationError("Passport consent approval did not return a code");
+  return requestData;
+};
+
+const exchangeConsentCode = async (code: string) => {
+  const baseUrlWithApi = getPassportApiBaseUrl();
+  const passportClient = getPassportClient();
+
+  if (!baseUrlWithApi || !env.PASSPORT_API_TOKEN || !passportClient) {
+    throw AuthenticationError(
+      "Passport consent configuration is missing (PASSPORT_API_BASE_URL, PASSPORT_API_TOKEN, OIDC_CLIENT_ID, URL)"
+    );
   }
+
+  const consentTokenUrl = `${baseUrlWithApi}/services/consent/token`;
+  const headers = {
+    "X-API-Token": env.PASSPORT_API_TOKEN,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
 
   const tokenRes = await fetch(consentTokenUrl, {
     method: "POST",
     allowPrivateIPAddress: true,
     headers,
     body: JSON.stringify({
-      code: decisionData.code,
+      code,
       client_id: passportClient.client_id,
     }),
   });
@@ -212,11 +197,13 @@ async function fetchPassportProfile(accessToken: string) {
 
   const tokenData = (await tokenRes.json()) as { user?: PassportProfile };
   if (!tokenData?.user) {
-    throw AuthenticationError("Passport consent token did not return user data");
+    throw AuthenticationError(
+      "Passport consent token did not return user data"
+    );
   }
 
   return tokenData.user;
-}
+};
 
 /**
  * Creates OIDC routes and mounts them into the provided router
@@ -226,212 +213,155 @@ export function createOIDCRouter(
   endpoints: OIDCEndpoints
 ): void {
   const scopes = env.OIDC_SCOPES.split(" ");
+  const stateStore = new StateStore(endpoints.pkce);
 
-  passport.use(
-    config.id,
-    new OIDCStrategy(
-      {
-        authorizationURL: endpoints.authorizationURL,
-        tokenURL: endpoints.tokenURL,
-        clientID: env.OIDC_CLIENT_ID!,
-        clientSecret: env.OIDC_CLIENT_SECRET!,
-        callbackURL: `${env.URL}/auth/${config.id}.callback`,
-        passReqToCallback: true,
-        scope: env.OIDC_SCOPES,
-        // @ts-expect-error custom state store
-        store: new StateStore(endpoints.pkce),
-        state: true,
-        pkce: endpoints.pkce ?? false,
-      },
-      // OpenID Connect standard profile claims can be found in the official
-      // specification.
-      // https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims
-      // Non-standard claims may be configured by individual identity providers.
-      // Any claim supplied in response to the userinfo request will be
-      // available on the `profile` parameter
-      async function (
-        context: Context,
-        accessToken: string,
-        refreshToken: string,
-        params: { expires_in: number; id_token: string },
-        _profile: unknown,
-        done: (
-          err: Error | null,
-          user: User | null,
-          result?: AuthenticationResult
-        ) => void
-      ) {
-        try {
-          // Some providers require a POST request to the userinfo endpoint, add them as exceptions here.
-          const usePostMethod = [
-            "https://api.dropboxapi.com/2/openid/userinfo",
-          ];
-
-          const profile = await request(
-            usePostMethod.includes(endpoints.userInfoURL) ? "POST" : "GET",
-            endpoints.userInfoURL,
-            accessToken
-          );
-
-          // Some providers, namely ADFS, don't provide anything more than the `sub` claim in the userinfo endpoint
-          // So, we'll decode the params.id_token and see if that contains what we need.
-          const token = (() => {
-            try {
-              const decoded = JWT.decode(params.id_token);
-
-              if (!decoded || typeof decoded !== "object") {
-                Logger.warn("Decoded id_token is not a valid object");
-                return {};
-              }
-
-              return decoded as {
-                email?: string;
-                preferred_username?: string;
-                sub?: string;
-              };
-            } catch (err) {
-              Logger.error("id_token decode threw error: ", err);
-              return {};
-            }
-          })();
-
-          const passportProfile = await fetchPassportProfile(accessToken);
-          const email = passportProfile.email ?? profile.email ?? token.email ?? null;
-
-          if (!email) {
-            throw AuthenticationError(
-              `An email field was not returned from Passport consent, profile, or id_token, but is required.`
-            );
+  router.get(config.id, async (ctx: Context) => {
+    try {
+      let stateToken: string | undefined;
+      await new Promise<void>((resolve, reject) => {
+        stateStore.store(ctx, (err, token) => {
+          if (err || !token) {
+            return reject(err ?? new Error("Failed to store state"));
           }
+          stateToken = token;
+          return resolve();
+        });
+      });
 
-          const team = await getTeamFromContext(context);
-          const client = getClientFromContext(context);
-          const { domain } = parseEmail(email);
+      const consent = await requestConsent(stateToken);
+      return ctx.redirect(consent.consent_url);
+    } catch (err) {
+      Logger.error("Error initiating Passport consent flow", err as Error);
+      throw AuthenticationError("Failed to start authentication");
+    }
+  });
 
-          // Only a single OIDC provider is supported – find the existing, if any.
-          const authenticationProvider = team
-            ? ((await AuthenticationProvider.findOne({
-                where: {
-                  name: "oidc",
-                  teamId: team.id,
-                  providerId: domain,
-                },
-              })) ??
-              (await AuthenticationProvider.findOne({
-                where: {
-                  name: "oidc",
-                  teamId: team.id,
-                },
-              })))
-            : undefined;
+  const handleCallback = async (ctx: Context) => {
+    const code = ctx.query.code?.toString();
+    const state = ctx.query.state?.toString();
 
-          // Derive a providerId from the OIDC location if there is no existing provider.
-          const oidcURL = new URL(endpoints.authorizationURL);
-          const providerId =
-            authenticationProvider?.providerId ?? oidcURL.hostname;
+    if (!code) {
+      throw AuthenticationError("Missing consent code");
+    }
 
-          if (!domain) {
-            throw OIDCMalformedUserInfoError();
-          }
-
-          // remove the TLD and form a subdomain from the remaining
-          const subdomain = slugifyDomain(domain);
-
-          const profileDebugInfo = {
-            email,
-            passportProfile,
-            oidcProfile: {
-              id: profile.sub ?? profile.id,
-              name: profile.name,
-              nickname: profile.nickname,
-              username: profile.username,
-              preferred_username: get(profile, env.OIDC_USERNAME_CLAIM),
-              picture: profile.picture,
-            },
-            tokenClaims: {
-              email: token.email,
-              preferred_username: get(token, env.OIDC_USERNAME_CLAIM),
-            },
-          };
-
-          const failWithPassportProfileError = (message: string) => {
-            const error = AuthenticationError(message);
-            Logger.error(message, error, profileDebugInfo);
-            throw error;
-          };
-
-          if (!passportProfile) {
-            failWithPassportProfileError(
-              `Passport profile was not returned for ${email}.`
-            );
-          }
-
-          const name = passportProfile.nickname;
-          if (!name) {
-            failWithPassportProfileError(
-              `Passport profile for ${email} is missing a name.`
-            );
-          }
-          const profileId = profile.sub ? profile.sub : profile.id;
-          if (!profileId) {
-            throw AuthenticationError(
-              `A user id was not returned in the profile loaded from ${endpoints.userInfoURL}, searched in "sub" and "id" fields.`
-            );
-          }
-
-          // Only accept avatar returned by Passport. Reject invalid formats,
-          // but allow falling back to the default avatar if none is provided.
-          let avatarUrl = passportProfile.avatar_url ?? null;
-          if (avatarUrl && isBase64Url(avatarUrl)) {
-            failWithPassportProfileError(
-              `Passport avatar for ${email} is invalid.`
-            );
-          }
-
-          const ctx = createContext({ ip: context.ip });
-          const result = await accountProvisioner(ctx, {
-            team: {
-              teamId: team?.id,
-              name: env.APP_NAME,
-              domain,
-              subdomain,
-              avatarUrl,
-            },
-            user: {
-              name,
-              email,
-              avatarUrl,
-              language: normalizeLanguage(passportProfile?.preferred_language),
-            },
-            authenticationProvider: {
-              name: config.id,
-              providerId,
-            },
-            authentication: {
-              providerId: profileId,
-              accessToken,
-              refreshToken,
-              expiresIn: params.expires_in,
-              scopes,
-            },
-          });
-
-          if (avatarUrl && !result.isNewUser) {
-            await new UploadUserAvatarTask().schedule({
-              userId: result.user.id,
-              avatarUrl,
-            });
-          }
-
-          return done(null, result.user, { ...result, client });
-        } catch (err) {
-          return done(err, null);
+    await new Promise<void>((resolve, reject) => {
+      stateStore.verify(ctx, state ?? "", (err) => {
+        if (err) {
+          return reject(err);
         }
-      }
-    )
-  );
+        resolve();
+      });
+    });
 
-  router.get(config.id, passport.authenticate(config.id));
-  router.get(`${config.id}.callback`, passportMiddleware(config.id));
-  router.post(`${config.id}.callback`, passportMiddleware(config.id));
+    try {
+      const passportProfile = await exchangeConsentCode(code);
+      const email = passportProfile.email;
+
+      if (!email) {
+        throw AuthenticationError(
+          `An email field was not returned from Passport consent, but is required.`
+        );
+      }
+
+      const team = await getTeamFromContext(ctx);
+      const client = getClientFromContext(ctx);
+      const { domain } = parseEmail(email);
+
+      const authenticationProvider = team
+        ? ((await AuthenticationProvider.findOne({
+            where: {
+              name: "oidc",
+              teamId: team.id,
+              providerId: domain,
+            },
+          })) ??
+          (await AuthenticationProvider.findOne({
+            where: {
+              name: "oidc",
+              teamId: team.id,
+            },
+          })))
+        : undefined;
+
+      const providerId =
+        authenticationProvider?.providerId ??
+        slugifyDomain(domain) ??
+        domain ??
+        config.id;
+
+      if (!domain) {
+        throw OIDCMalformedUserInfoError();
+      }
+
+      const subdomain = slugifyDomain(domain);
+
+      const profileDebugInfo = {
+        email,
+        passportProfile,
+      };
+
+      const failWithPassportProfileError = (message: string) => {
+        const error = AuthenticationError(message);
+        Logger.error(message, error, profileDebugInfo);
+        throw error;
+      };
+
+      const name = passportProfile.nickname;
+      if (!name) {
+        failWithPassportProfileError(
+          `Passport profile for ${email} is missing a name.`
+        );
+      }
+
+      let avatarUrl = passportProfile.avatar_url ?? null;
+      if (avatarUrl && isBase64Url(avatarUrl)) {
+        failWithPassportProfileError(
+          `Passport avatar for ${email} is invalid.`
+        );
+      }
+
+      const ctxWithIp = createContext({ ip: ctx.ip });
+      const result = await accountProvisioner(ctxWithIp, {
+        team: {
+          teamId: team?.id,
+          name: env.APP_NAME,
+          domain,
+          subdomain,
+          avatarUrl,
+        },
+        user: {
+          name,
+          email,
+          avatarUrl,
+          language: normalizeLanguage(passportProfile?.preferred_language),
+        },
+        authenticationProvider: {
+          name: config.id,
+          providerId,
+        },
+        authentication: {
+          providerId: passportProfile.id,
+          accessToken: code,
+          refreshToken: undefined,
+          expiresIn: undefined,
+          scopes,
+        },
+      });
+
+      if (avatarUrl && !result.isNewUser) {
+        await new UploadUserAvatarTask().schedule({
+          userId: result.user.id,
+          avatarUrl,
+        });
+      }
+
+      await signIn(ctx, config.id, { ...result, client });
+    } catch (err) {
+      Logger.error("Error completing Passport consent flow", err as Error);
+      throw err;
+    }
+  };
+
+  router.get(`${config.id}.callback`, handleCallback);
+  router.post(`${config.id}.callback`, handleCallback);
 }
