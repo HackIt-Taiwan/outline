@@ -128,6 +128,16 @@ class OIDCPluginEnvironment extends Environment {
   public PASSPORT_API_TOKEN = this.toOptionalString(
     environment.PASSPORT_API_TOKEN
   );
+
+  /**
+   * Base64 encoded JSON array of Passport OAuth-lite clients that Outline
+   * should use for consent-based authentication.
+   */
+  @IsOptional()
+  @CannotUseWithout("PASSPORT_API_BASE_URL")
+  public PASSPORT_CLIENTS_B64 = this.toOptionalString(
+    environment.PASSPORT_CLIENTS_B64
+  );
 }
 
 export default new OIDCPluginEnvironment();
