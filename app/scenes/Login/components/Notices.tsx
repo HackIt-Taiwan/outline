@@ -72,10 +72,16 @@ function Message({ notice }: { notice: string }) {
     case "auth-error":
     case "state-mismatch":
       return (
-        <Trans>
-          Authentication failed – we were unable to sign you in at this time.
-          Please try again.
-        </Trans>
+        <>
+          <Trans>
+            Authentication failed – we were unable to sign you in at this time.
+            Please try again.
+          </Trans>
+          <hr />
+          <a href="/auth/oidc" role="button">
+            <Trans>Retry OIDC sign-in</Trans>
+          </a>
+        </>
       );
     case "invalid-authentication":
       return (
