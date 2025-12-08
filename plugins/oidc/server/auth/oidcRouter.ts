@@ -208,42 +208,60 @@ export function createOIDCRouter(
           // remove the TLD and form a subdomain from the remaining
           const subdomain = slugifyDomain(domain);
 
-          // Claim name can be overriden using an env variable.
-          // Default is 'preferred_username' as per OIDC spec.
-          // This will default to the profile.preferred_username, but will fall back to preferred_username from the id_token
-          const username =
-            get(profile, env.OIDC_USERNAME_CLAIM) ??
-            get(token, env.OIDC_USERNAME_CLAIM);
-          const name =
-            passportProfile?.nickname ||
-            profile.name ||
-            username ||
-            profile.username;
-          const profileId = profile.sub ? profile.sub : profile.id;
+          const profileDebugInfo = {
+            email,
+            passportProfile,
+            oidcProfile: {
+              id: profile.sub ?? profile.id,
+              name: profile.name,
+              nickname: profile.nickname,
+              username: profile.username,
+              preferred_username: get(profile, env.OIDC_USERNAME_CLAIM),
+              picture: profile.picture,
+            },
+            tokenClaims: {
+              email: token.email,
+              preferred_username: get(token, env.OIDC_USERNAME_CLAIM),
+            },
+          };
 
-          if (!name) {
-            throw AuthenticationError(
-              `Neither a ${env.OIDC_USERNAME_CLAIM}, "name" or "username" was returned in the profile loaded from ${endpoints.userInfoURL}, but at least one is required.`
+          const failWithPassportProfileError = (message: string) => {
+            const error = AuthenticationError(message);
+            Logger.error(message, error, profileDebugInfo);
+            throw error;
+          };
+
+          if (!passportProfile) {
+            failWithPassportProfileError(
+              `Passport profile was not returned for ${email}.`
             );
           }
+
+          const name = passportProfile.nickname;
+          if (!name) {
+            failWithPassportProfileError(
+              `Passport profile for ${email} is missing a name.`
+            );
+          }
+          const profileId = profile.sub ? profile.sub : profile.id;
           if (!profileId) {
             throw AuthenticationError(
               `A user id was not returned in the profile loaded from ${endpoints.userInfoURL}, searched in "sub" and "id" fields.`
             );
           }
 
-          // Check if the picture field is a Base64 data URL and filter it out
-          // to avoid validation errors in the User model
-          let avatarUrl = passportProfile?.avatar_url ?? profile.picture;
-          if (avatarUrl && isBase64Url(avatarUrl)) {
-            Logger.debug(
-              "authentication",
-              "Filtering out Base64 data URL from avatar",
-              {
-                email,
-              }
+          // Only accept avatar returned by Passport. Reject invalid formats.
+          const avatarUrl = passportProfile.avatar_url;
+          if (!avatarUrl) {
+            failWithPassportProfileError(
+              `Passport profile for ${email} is missing an avatar.`
             );
-            avatarUrl = null;
+          }
+
+          if (isBase64Url(avatarUrl)) {
+            failWithPassportProfileError(
+              `Passport avatar for ${email} is invalid.`
+            );
           }
 
           const ctx = createContext({ ip: context.ip });
