@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { createHash } from "crypto";
 import { User } from "@server/models";
 import { Buckets } from "@server/models/helpers/AttachmentHelper";
 import FileStorage from "@server/storage/files";
@@ -21,9 +21,12 @@ export default class UploadUserAvatarTask extends BaseTask<Props> {
       rejectOnEmpty: true,
     });
 
+    const hash = createHash("md5").update(props.avatarUrl).digest("hex");
+    const key = `${Buckets.avatars}/${user.id}/${hash}`;
+
     const res = await FileStorage.storeFromUrl(
       props.avatarUrl,
-      `${Buckets.avatars}/${user.id}/${randomUUID()}`,
+      key,
       "public-read"
     );
 

@@ -6,11 +6,7 @@ import { UserRole } from "@shared/types";
 import User from "~/models/User";
 import { DropdownMenu } from "~/components/Menu/DropdownMenu";
 import { OverflowMenuButton } from "~/components/Menu/OverflowMenuButton";
-import {
-  UserSuspendDialog,
-  UserChangeNameDialog,
-  UserChangeEmailDialog,
-} from "~/components/UserDialogs";
+import { UserSuspendDialog } from "~/components/UserDialogs";
 import {
   ActionV2Separator,
   createActionV2,
@@ -33,24 +29,6 @@ function UserMenu({ user }: Props) {
   const { users, dialogs } = useStores();
   const { t } = useTranslation();
   const can = usePolicy(user);
-
-  const handleChangeName = React.useCallback(() => {
-    dialogs.openModal({
-      title: t("Change name"),
-      content: (
-        <UserChangeNameDialog user={user} onSubmit={dialogs.closeAllModals} />
-      ),
-    });
-  }, [dialogs, t, user]);
-
-  const handleChangeEmail = React.useCallback(() => {
-    dialogs.openModal({
-      title: t("Change email"),
-      content: (
-        <UserChangeEmailDialog user={user} onSubmit={dialogs.closeAllModals} />
-      ),
-    });
-  }, [dialogs, t, user]);
 
   const handleSuspend = React.useCallback(() => {
     dialogs.openModal({
@@ -97,18 +75,6 @@ function UserMenu({ user }: Props) {
         children: changeRoleActions,
       }),
       createActionV2({
-        name: `${t("Change name")}…`,
-        section: UserSection,
-        visible: can.update,
-        perform: handleChangeName,
-      }),
-      createActionV2({
-        name: `${t("Change email")}…`,
-        section: UserSection,
-        visible: can.update,
-        perform: handleChangeEmail,
-      }),
-      createActionV2({
         name: t("Resend invite"),
         section: UserSection,
         visible: can.resendInvite,
@@ -142,14 +108,11 @@ function UserMenu({ user }: Props) {
       t,
       can.demote,
       can.promote,
-      can.update,
       can.resendInvite,
       user.id,
       user.isInvited,
       user.isSuspended,
       changeRoleActions,
-      handleChangeName,
-      handleChangeEmail,
       handleResendInvite,
       handleRevoke,
       handleActivate,

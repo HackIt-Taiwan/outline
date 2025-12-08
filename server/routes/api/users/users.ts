@@ -2,10 +2,8 @@ import Router from "koa-router";
 import { Op, Sequelize, WhereOptions } from "sequelize";
 import { UserPreference, UserRole } from "@shared/types";
 import { UserRoleHelper } from "@shared/utils/UserRoleHelper";
-import { settingsPath } from "@shared/utils/routeHelpers";
 import { UserValidation } from "@shared/validations";
 import userInviter from "@server/commands/userInviter";
-import ConfirmUpdateEmail from "@server/emails/templates/ConfirmUpdateEmail";
 import ConfirmUserDeleteEmail from "@server/emails/templates/ConfirmUserDeleteEmail";
 import InviteEmail from "@server/emails/templates/InviteEmail";
 import env from "@server/env";
@@ -22,7 +20,6 @@ import { presentUser, presentPolicies } from "@server/presenters";
 import { APIContext } from "@server/types";
 import { RateLimiterStrategy } from "@server/utils/RateLimiter";
 import { safeEqual } from "@server/utils/crypto";
-import { getDetailsForEmailUpdateToken } from "@server/utils/jwt";
 import pagination from "../middlewares/pagination";
 import * as T from "./schema";
 
@@ -206,38 +203,7 @@ router.post(
   auth(),
   validate(T.UsersUpdateEmailSchema),
   async (ctx: APIContext<T.UsersUpdateEmailReq>) => {
-    if (!env.EMAIL_ENABLED) {
-      throw ValidationError("Email support is not setup for this instance");
-    }
-
-    const { user: actor } = ctx.state.auth;
-    const { id } = ctx.input.body;
-    const { team } = actor;
-    const user = id ? await User.findByPk(id) : actor;
-    const email = ctx.input.body.email.trim().toLowerCase();
-
-    authorize(actor, "update", user);
-
-    // Check if email domain is allowed
-    if (!(await team.isDomainAllowed(email))) {
-      throw ValidationError("The domain is not allowed for this workspace");
-    }
-
-    // Check if email already exists in workspace
-    if (await User.findByEmail(ctx, email)) {
-      throw ValidationError("User with email already exists");
-    }
-
-    await new ConfirmUpdateEmail({
-      to: email,
-      previous: user.email,
-      code: user.getEmailUpdateToken(email),
-      teamUrl: team.url,
-    }).schedule();
-
-    ctx.body = {
-      success: true,
-    };
+    throw ValidationError("Email is managed by your identity provider");
   }
 );
 
@@ -248,49 +214,7 @@ router.get(
   transaction(),
   validate(T.UsersUpdateEmailConfirmSchema),
   async (ctx: APIContext<T.UsersUpdateEmailConfirmReq>) => {
-    if (!env.EMAIL_ENABLED) {
-      throw ValidationError("Email support is not setup for this instance");
-    }
-
-    const { transaction } = ctx.state;
-    const { code, follow } = ctx.input.query;
-
-    // The link in the email does not include the follow query param, this
-    // is to help prevent anti-virus, and email clients from pre-fetching the link
-    if (!follow) {
-      return ctx.redirectOnClient(ctx.request.href + "&follow=true");
-    }
-    let user: User;
-    let email: string;
-
-    try {
-      const res = await getDetailsForEmailUpdateToken(code as string, {
-        transaction,
-        lock: transaction.LOCK.UPDATE,
-      });
-      user = res.user;
-      email = res.email;
-    } catch (_err) {
-      ctx.redirect(`/?notice=expired-token`);
-      return;
-    }
-
-    const { user: actor } = ctx.state.auth;
-    authorize(actor, "update", user);
-
-    // Check if email domain is allowed
-    if (!(await actor.team.isDomainAllowed(email))) {
-      throw ValidationError("The domain is not allowed for this workspace");
-    }
-
-    // Check if email already exists in workspace
-    if (await User.findByEmail(ctx, email)) {
-      throw ValidationError("User with email already exists");
-    }
-
-    await user.updateWithCtx(ctx, { email });
-
-    ctx.redirect(settingsPath());
+    throw ValidationError("Email is managed by your identity provider");
   }
 );
 
@@ -304,6 +228,12 @@ router.post(
     const actor = auth.user;
     const { id, name, avatarUrl, language, preferences, timezone } =
       ctx.input.body;
+
+    if (name !== undefined || avatarUrl !== undefined) {
+      throw ValidationError(
+        "Name and avatar are managed by your identity provider"
+      );
+    }
 
     let user: User | null = actor;
     if (id) {

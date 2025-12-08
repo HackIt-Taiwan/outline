@@ -89,6 +89,8 @@ export default async function userProvisioner(
     if (user) {
       await user.update({
         email,
+        name,
+        avatarUrl,
       });
       await auth.update(rest);
       return {

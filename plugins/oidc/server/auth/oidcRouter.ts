@@ -13,6 +13,7 @@ import {
   AuthenticationError,
 } from "@server/errors";
 import Logger from "@server/logging/Logger";
+import UploadUserAvatarTask from "@server/queues/tasks/UploadUserAvatarTask";
 import passportMiddleware from "@server/middlewares/passport";
 import { AuthenticationProvider, User } from "@server/models";
 import { AuthenticationResult } from "@server/types";
@@ -300,6 +301,14 @@ export function createOIDCRouter(
               scopes,
             },
           });
+
+          if (avatarUrl && !result.isNewUser) {
+            await new UploadUserAvatarTask().schedule({
+              userId: result.user.id,
+              avatarUrl,
+            });
+          }
+
           return done(null, result.user, { ...result, client });
         } catch (err) {
           return done(err, null);
