@@ -280,6 +280,7 @@ export function createOIDCRouter(
               name: env.APP_NAME,
               domain,
               subdomain,
+              avatarUrl,
             },
             user: {
               name,

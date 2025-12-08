@@ -73,6 +73,10 @@ export default class S3Storage extends BaseStorage {
   }
 
   private getPublicEndpoint(isServerUpload?: boolean) {
+    if (env.AWS_S3_R2 && env.AWS_S3_R2_PUBLIC_URL) {
+      return env.AWS_S3_R2_PUBLIC_URL.replace(/\/$/, "");
+    }
+
     if (env.AWS_S3_ACCELERATE_URL) {
       return env.AWS_S3_ACCELERATE_URL;
     }
@@ -182,8 +186,12 @@ export default class S3Storage extends BaseStorage {
     }
   };
 
-  public getR2ObjectUrl = async (key: string) =>
-    env.AWS_S3_R2_PUBLIC_URL + "/" + key;
+  public getR2ObjectUrl = async (key: string) => {
+    const base =
+      env.AWS_S3_R2_PUBLIC_URL?.replace(/\/$/, "") ||
+      this.getPublicEndpoint();
+    return `${base}/${key}`;
+  };
 
   public getFileHandle(key: string): Promise<{
     path: string;
