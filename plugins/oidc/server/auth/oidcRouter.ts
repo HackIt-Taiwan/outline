@@ -6,6 +6,7 @@ import get from "lodash/get";
 import { slugifyDomain } from "@shared/utils/domains";
 import { parseEmail } from "@shared/utils/email";
 import { isBase64Url } from "@shared/utils/urls";
+import { languages } from "@shared/i18n";
 import accountProvisioner from "@server/commands/accountProvisioner";
 import {
   OIDCMalformedUserInfoError,
@@ -42,6 +43,17 @@ type PassportProfile = {
   nickname?: string;
   avatar_url?: string | null;
   preferred_language?: string | null;
+};
+
+const normalizeLanguage = (language?: string | null) => {
+  if (!language) {
+    return undefined;
+  }
+
+  const normalized = language.replace("-", "_");
+  return languages.includes(normalized as (typeof languages)[number])
+    ? normalized
+    : undefined;
 };
 
 async function fetchPassportProfile(email: string) {
@@ -273,7 +285,7 @@ export function createOIDCRouter(
               name,
               email,
               avatarUrl,
-              language: passportProfile?.preferred_language ?? undefined,
+              language: normalizeLanguage(passportProfile?.preferred_language),
             },
             authenticationProvider: {
               name: config.id,
