@@ -340,7 +340,10 @@ export function createOIDCRouter(
           providerId,
         },
         authentication: {
-          providerId: passportProfile.id,
+          providerId:
+            passportProfile.id ??
+            passportProfile.logto_id ??
+            passportProfile.email,
           accessToken: code,
           refreshToken: undefined,
           expiresIn: undefined,
