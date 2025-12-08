@@ -14,9 +14,6 @@ import SettingRow from "./components/SettingRow";
 const Profile = () => {
   const user = useCurrentUser();
   const { t } = useTranslation();
-  const profileManagedNotice = t(
-    "Your name and photo are managed by your identity provider."
-  );
 
   return (
     <Scene title={t("Profile")} icon={<ProfileIcon />}>
@@ -36,15 +33,12 @@ const Profile = () => {
             size={AvatarSize.Upload}
             alt={t("Profile picture")}
           />
-          <Text type="secondary">{profileManagedNotice}</Text>
         </SettingRow>
         <SettingRow
           border={env.EMAIL_ENABLED}
           label={t("Name")}
           name="name"
-          description={t(
-            "This is managed by your identity provider and cannot be edited here."
-          )}
+          description={t("View your current name.")}
         >
           <Input
             id="name"
@@ -53,7 +47,6 @@ const Profile = () => {
             readOnly
             disabled
           />
-          <Text type="secondary">{profileManagedNotice}</Text>
         </SettingRow>
 
         {env.EMAIL_ENABLED && (
@@ -64,9 +57,6 @@ const Profile = () => {
               readOnly
               disabled
             />
-            <Text type="secondary">
-              {t("Email is managed by your identity provider.")}
-            </Text>
           </SettingRow>
         )}
 
