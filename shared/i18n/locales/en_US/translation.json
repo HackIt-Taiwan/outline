@@ -871,6 +871,7 @@
   "Your account uses email sign-in, please sign-in with email to continue.": "Your account uses email sign-in, please sign-in with email to continue.",
   "An email sign-in link was recently sent, please check your inbox or try again in a few minutes.": "An email sign-in link was recently sent, please check your inbox or try again in a few minutes.",
   "Authentication failed – we were unable to sign you in at this time. Please try again.": "Authentication failed – we were unable to sign you in at this time. Please try again.",
+  "Retry OIDC sign-in": "Retry OIDC sign-in",
   "Authentication failed – you do not have permission to access this workspace.": "Authentication failed – you do not have permission to access this workspace.",
   "Sorry, it looks like that sign-in link is no longer valid, please try requesting another.": "Sorry, it looks like that sign-in link is no longer valid, please try requesting another.",
   "Your account has been suspended. To re-activate your account, please contact a workspace admin.": "Your account has been suspended. To re-activate your account, please contact a workspace admin.",

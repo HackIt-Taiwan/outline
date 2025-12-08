@@ -7,9 +7,6 @@ import { useDocumentContext } from "~/components/DocumentContext";
 import { useTeamContext } from "~/components/TeamContext";
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
-import { parseDomain } from "@shared/utils/domains";
-import useCurrentUser from "~/hooks/useCurrentUser";
-import Branding from "~/components/Branding";
 
 type Props = {
   document: DocumentModel;
@@ -19,15 +16,9 @@ type Props = {
 
 function SharedDocument({ document, shareId, sharedTree }: Props) {
   const team = useTeamContext() as PublicTeam | undefined;
-  const user = useCurrentUser({ rejectOnEmpty: false });
   const location = useLocation();
   const { hasHeadings, setDocument } = useDocumentContext();
   const abilities = useMemo(() => ({}), []);
-  const isCustomDomain = useMemo(
-    () => parseDomain(window.location.origin).custom,
-    []
-  );
-  const showBranding = !isCustomDomain && !user;
   const isKanbanView =
     new URLSearchParams(location.search).get("view") === "kanban";
 
@@ -57,9 +48,6 @@ function SharedDocument({ document, shareId, sharedTree }: Props) {
         tocPosition={tocPosition}
         readOnly
       />
-      {showBranding ? (
-        <Branding href="//www.getoutline.com?ref=sharelink" />
-      ) : null}
     </>
   );
 }
