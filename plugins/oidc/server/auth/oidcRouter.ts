@@ -10,7 +10,6 @@ import {
   AuthenticationError,
 } from "@server/errors";
 import Logger from "@server/logging/Logger";
-import UploadUserAvatarTask from "@server/queues/tasks/UploadUserAvatarTask";
 import { AuthenticationProvider } from "@server/models";
 import fetch from "@server/utils/fetch";
 import { signIn } from "@server/utils/authentication";
@@ -350,13 +349,6 @@ export function createOIDCRouter(
           scopes,
         },
       });
-
-      if (avatarUrl && !result.isNewUser) {
-        await new UploadUserAvatarTask().schedule({
-          userId: result.user.id,
-          avatarUrl,
-        });
-      }
 
       await signIn(ctx, config.id, { ...result, client });
     } catch (err) {
