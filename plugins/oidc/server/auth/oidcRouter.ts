@@ -1,26 +1,29 @@
 import type { Context } from "koa";
 import Router from "koa-router";
+import { languages } from "@shared/i18n";
+import { Client } from "@shared/types";
 import { slugifyDomain } from "@shared/utils/domains";
 import { parseEmail } from "@shared/utils/email";
 import { isBase64Url } from "@shared/utils/urls";
-import { languages } from "@shared/i18n";
 import accountProvisioner from "@server/commands/accountProvisioner";
 import {
   OIDCMalformedUserInfoError,
   AuthenticationError,
+  OAuthStateMismatchError,
 } from "@server/errors";
 import Logger from "@server/logging/Logger";
 import { AuthenticationProvider } from "@server/models";
-import fetch from "@server/utils/fetch";
+import { createContext } from "@server/context";
 import { signIn } from "@server/utils/authentication";
+import fetch from "@server/utils/fetch";
 import {
   StateStore,
   getTeamFromContext,
   getClientFromContext,
+  parseState,
 } from "@server/utils/passport";
 import config from "../../plugin.json";
 import env from "../env";
-import { createContext } from "@server/context";
 
 const PASSPORT_ALLOWED_FIELDS = new Set([
   "email",
@@ -236,23 +239,47 @@ export function createOIDCRouter(
   });
 
   const handleCallback = async (ctx: Context) => {
-    const code = ctx.query.code?.toString();
-    const state = ctx.query.state?.toString();
+    const requestBody =
+      ctx.request.body && typeof ctx.request.body === "object"
+        ? (ctx.request.body as Record<string, unknown>)
+        : undefined;
+    const getParam = (
+      key: string
+    ): string | string[] | number | undefined => {
+      const queryValue = ctx.query[key];
+      if (queryValue !== undefined) {
+        return queryValue;
+      }
+      const bodyValue = requestBody?.[key];
+      if (
+        typeof bodyValue === "string" ||
+        typeof bodyValue === "number" ||
+        Array.isArray(bodyValue)
+      ) {
+        return bodyValue as string | string[] | number;
+      }
+      return undefined;
+    };
 
-    if (!code) {
-      throw AuthenticationError("Missing consent code");
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      stateStore.verify(ctx, state ?? "", (err) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve();
-      });
-    });
+    const code = getParam("code")?.toString();
+    const state = getParam("state")?.toString();
+    const stateCookie = ctx.cookies.get(stateStore.key);
+    const parsedState = stateCookie ? parseState(stateCookie) : undefined;
 
     try {
+      if (!code) {
+        throw AuthenticationError("Missing consent code");
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        stateStore.verify(ctx, state ?? "", (err) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve();
+        });
+      });
+
       const passportProfile = await exchangeConsentCode(code);
       const email = passportProfile.email;
 
@@ -263,7 +290,10 @@ export function createOIDCRouter(
       }
 
       const team = await getTeamFromContext(ctx);
-      const client = getClientFromContext(ctx);
+      const client =
+        parsedState?.client === Client.Desktop
+          ? Client.Desktop
+          : getClientFromContext(ctx);
       const { domain } = parseEmail(email);
 
       const authenticationProvider = team
@@ -353,7 +383,37 @@ export function createOIDCRouter(
       await signIn(ctx, config.id, { ...result, client });
     } catch (err) {
       Logger.error("Error completing Passport consent flow", err as Error);
-      throw err;
+
+      if (err && typeof err === "object" && "id" in err) {
+        const notice = String((err as { id: string }).id).replace(/_/g, "-");
+        const redirectPath =
+          "redirectPath" in err && (err as { redirectPath?: string }).redirectPath
+            ? (err as { redirectPath?: string }).redirectPath!
+            : "/";
+        const hasQueryString = redirectPath.includes("?");
+        const reqProtocol =
+          parsedState?.client === Client.Desktop ? "outline" : ctx.protocol;
+        const requestHost =
+          err instanceof OAuthStateMismatchError
+            ? ctx.hostname
+            : parsedState?.host ?? ctx.hostname;
+        const url = new URL(
+          env.isCloudHosted
+            ? `${reqProtocol}://${requestHost}${redirectPath}`
+            : `${env.URL}${redirectPath}`
+        );
+
+        ctx.redirect(
+          `${url.toString()}${hasQueryString ? "&" : "?"}notice=${notice}`
+        );
+        return;
+      }
+
+      if (env.isDevelopment) {
+        throw err;
+      }
+
+      ctx.redirect(`/?notice=auth-error`);
     }
   };
 
