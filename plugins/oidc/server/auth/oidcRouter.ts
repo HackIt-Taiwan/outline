@@ -243,9 +243,7 @@ export function createOIDCRouter(
       ctx.request.body && typeof ctx.request.body === "object"
         ? (ctx.request.body as Record<string, unknown>)
         : undefined;
-    const getParam = (
-      key: string
-    ): string | string[] | number | undefined => {
+    const getParam = (key: string): string | string[] | number | undefined => {
       const queryValue = ctx.query[key];
       if (queryValue !== undefined) {
         return queryValue;
@@ -373,7 +371,10 @@ export function createOIDCRouter(
             passportProfile.id ??
             passportProfile.logto_id ??
             passportProfile.email,
-          accessToken: code,
+          // Passport OAuth-lite consent returns a short-lived, one-time `code`.
+          // This is not a reusable access token and must not be stored for
+          // later validation/refresh.
+          accessToken: "",
           refreshToken: undefined,
           expiresIn: undefined,
           scopes,
@@ -387,7 +388,8 @@ export function createOIDCRouter(
       if (err && typeof err === "object" && "id" in err) {
         const notice = String((err as { id: string }).id).replace(/_/g, "-");
         const redirectPath =
-          "redirectPath" in err && (err as { redirectPath?: string }).redirectPath
+          "redirectPath" in err &&
+          (err as { redirectPath?: string }).redirectPath
             ? (err as { redirectPath?: string }).redirectPath!
             : "/";
         const hasQueryString = redirectPath.includes("?");
@@ -396,7 +398,7 @@ export function createOIDCRouter(
         const requestHost =
           err instanceof OAuthStateMismatchError
             ? ctx.hostname
-            : parsedState?.host ?? ctx.hostname;
+            : (parsedState?.host ?? ctx.hostname);
         const url = new URL(
           env.isCloudHosted
             ? `${reqProtocol}://${requestHost}${redirectPath}`
