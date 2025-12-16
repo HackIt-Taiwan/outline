@@ -23,6 +23,7 @@ import {
 import { runInAction } from "mobx";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import styled, { css } from "styled-components";
+import { toast } from "sonner";
 import { BoardTag } from "@shared/types";
 import { Avatar, AvatarSize } from "~/components/Avatar";
 import Button from "~/components/Button";
@@ -45,6 +46,8 @@ import useCurrentUser from "~/hooks/useCurrentUser";
 import { s } from "@shared/styles";
 import { v4 as uuidv4 } from "uuid";
 import { format as formatDate } from "date-fns";
+import { client } from "~/utils/ApiClient";
+import kanbanToDocumentMarkdown from "~/utils/kanbanToDocumentMarkdown";
 import {
   Popover,
   PopoverTrigger,
@@ -540,6 +543,7 @@ function BoardView({
     null
   );
   const [deadlineInput, setDeadlineInput] = useState<string>("");
+  const [isSyncingDocument, setSyncingDocument] = useState(false);
   const [sortMode, setSortMode] = useState<"manual" | "name" | "dueAsc" | "dueDesc">("manual");
   const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
   const [filterMode, setFilterMode] = useState<"any" | "all">("any");
@@ -590,11 +594,22 @@ function BoardView({
         );
         setLoadError(null);
       })
-      .catch((err: any) => {
-        if (err?.status === 404) {
+      .catch((err: unknown) => {
+        const status =
+          err && typeof err === "object" && "status" in err
+            ? (err as { status?: unknown }).status
+            : undefined;
+        const statusCode = typeof status === "number" ? status : Number(status);
+
+        const message =
+          err && typeof err === "object" && "message" in err
+            ? (err as { message?: unknown }).message
+            : undefined;
+
+        if (statusCode === 404) {
           setLoadError("此文件尚未啟用看板，請在指令列輸入 /kanban 開啟。");
         } else {
-          setLoadError(err?.message ?? "Unable to load board");
+          setLoadError(typeof message === "string" ? message : "Unable to load board");
         }
       })
       .finally(() => setLoading(false));
@@ -894,14 +909,14 @@ function BoardView({
   };
 
   const formatDueLabel = (offset: number | null | undefined) => {
-    if (offset == null) {
+    if (offset === null || offset === undefined) {
       return null;
     }
     return `D-${offset}`;
   };
 
   const formatDueTooltip = (offset: number | null | undefined) => {
-    if (!deadline || offset == null) {
+    if (!deadline || offset === null || offset === undefined) {
       return null;
     }
     return formatDate(
@@ -911,10 +926,48 @@ function BoardView({
   };
 
   const getDueDateValue = (card: BoardCardModel) => {
-    if (!deadline || card.dueOffsetDays == null) {
+    if (
+      !deadline ||
+      card.dueOffsetDays === null ||
+      card.dueOffsetDays === undefined
+    ) {
       return null;
     }
     return new Date(deadline.getTime() - card.dueOffsetDays * 86400000);
+  };
+
+  const handleViewDocument = async () => {
+    const url = document.url.includes("?")
+      ? `${document.url}&view=document`
+      : `${document.url}?view=document`;
+
+    if (!abilities.update || !boardId || isSyncingDocument) {
+      window.location.href = url;
+      return;
+    }
+
+    try {
+      setSyncingDocument(true);
+      const markdown = kanbanToDocumentMarkdown({
+        columns: boardColumns.inBoard(boardId),
+        cards: boardCards.orderedData.filter((card) => card.boardId === boardId),
+      });
+      await client.post("/documents.update", {
+        id: document.id,
+        text: markdown,
+        done: true,
+      });
+      window.location.href = url;
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? (err as { message?: unknown }).message
+          : undefined;
+
+      toast.error(typeof message === "string" ? message : "同步文件失敗");
+    } finally {
+      setSyncingDocument(false);
+    }
   };
 
   const filteredAndSortedCards = useCallback(
@@ -1026,14 +1079,10 @@ function BoardView({
           {showDocumentLink && (
             <Button
               neutral
-              onClick={() => {
-                const url = document.url.includes("?")
-                  ? `${document.url}&view=document`
-                  : `${document.url}?view=document`;
-                window.location.href = url;
-              }}
+              onClick={() => void handleViewDocument()}
+              disabled={isSyncingDocument}
             >
-              查看文件
+              {isSyncingDocument ? "同步中…" : "查看文件"}
             </Button>
           )}
         </HeaderActions>
@@ -1471,18 +1520,6 @@ const TagFilterRow = styled(Flex)`
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-`;
-
-const ClearFilter = styled.button`
-  border: none;
-  background: transparent;
-  color: ${s("textTertiary")};
-  cursor: pointer;
-  font-size: 12px;
-
-  &:hover {
-    color: ${s("text")};
-  }
 `;
 
 const QuietHint = styled.div`
