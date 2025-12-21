@@ -46,7 +46,7 @@ export default function kanbanToDocumentMarkdown({
     const columnCards = cardsByColumnId.get(column.id) ?? [];
     for (const card of columnCards) {
       lines.push(
-        `- [${formatDueLabel(card.dueOffsetDays)}] ${normalizeInlineText(card.title)}`
+        `- [ ] [${formatDueLabel(card.dueOffsetDays)}] ${normalizeInlineText(card.title)}`
       );
 
       if (card.description) {
