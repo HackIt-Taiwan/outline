@@ -1,5 +1,8 @@
+import crypto from "crypto";
 import type { Context } from "koa";
 import Router from "koa-router";
+import get from "lodash/get";
+import jwt from "jsonwebtoken";
 import { languages } from "@shared/i18n";
 import { Client } from "@shared/types";
 import { slugifyDomain } from "@shared/utils/domains";
@@ -25,13 +28,6 @@ import {
 import config from "../../plugin.json";
 import env from "../env";
 
-const PASSPORT_ALLOWED_FIELDS = new Set([
-  "email",
-  "nickname",
-  "avatar_url",
-  "preferred_language",
-]);
-
 export interface OIDCEndpoints {
   authorizationURL?: string;
   tokenURL?: string;
@@ -40,21 +36,16 @@ export interface OIDCEndpoints {
   pkce?: boolean;
 }
 
-type PassportProfile = {
-  id: string;
-  logto_id?: string;
-  email: string;
-  nickname?: string;
-  avatar_url?: string | null;
-  preferred_language?: string | null;
+type OIDCTokenResponse = {
+  access_token?: string;
+  refresh_token?: string;
+  token_type?: string;
+  expires_in?: number;
+  scope?: string;
+  id_token?: string;
 };
 
-type PassportConsentClient = {
-  client_id: string;
-  name?: string;
-  redirect_uris: string[];
-  allowed_fields?: string[];
-};
+type OIDCClaims = Record<string, unknown>;
 
 const normalizeLanguage = (language?: string | null) => {
   if (!language) {
@@ -67,144 +58,155 @@ const normalizeLanguage = (language?: string | null) => {
     : undefined;
 };
 
-const getPassportApiBaseUrl = () => {
-  const baseUrl = env.PASSPORT_API_BASE_URL?.replace(/\/+$/, "");
-  if (!baseUrl) {
-    return null;
+const parseString = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() ? value : undefined;
+
+const parseNumber = (value: unknown): number | undefined => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
   }
-  return /\/api$/i.test(baseUrl) ? baseUrl : `${baseUrl}/api`;
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 };
 
-const getPassportClient = (): PassportConsentClient | null => {
-  if (env.OIDC_CLIENT_ID && env.URL) {
-    return {
-      client_id: env.OIDC_CLIENT_ID,
-      name: config.id,
-      redirect_uris: [`${env.URL}/auth/${config.id}.callback`],
-      allowed_fields: Array.from(PASSPORT_ALLOWED_FIELDS),
-    };
+const toBase64Url = (data: Buffer) =>
+  data
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+
+const generateCodeVerifier = () => toBase64Url(crypto.randomBytes(32));
+
+const generateCodeChallenge = (verifier: string) =>
+  toBase64Url(crypto.createHash("sha256").update(verifier).digest());
+
+const decodeIdToken = (raw?: string): OIDCClaims | undefined => {
+  if (!raw) {
+    return undefined;
   }
 
-  return null;
+  const decoded = jwt.decode(raw);
+  if (!decoded || typeof decoded === "string") {
+    return undefined;
+  }
+  return decoded as OIDCClaims;
 };
 
-const buildRequestedFields = (client?: PassportConsentClient) => {
-  const clientAllowed = client?.allowed_fields ?? [];
-  const requested = (
-    clientAllowed.length ? clientAllowed : Array.from(PASSPORT_ALLOWED_FIELDS)
-  ).filter((field) => PASSPORT_ALLOWED_FIELDS.has(field));
+const exchangeAuthorizationCode = async ({
+  code,
+  redirectUri,
+  codeVerifier,
+  tokenURL,
+}: {
+  code: string;
+  redirectUri: string;
+  codeVerifier?: string;
+  tokenURL: string;
+}): Promise<{
+  accessToken: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  scope?: string;
+  idToken?: string;
+}> => {
+  if (!env.OIDC_CLIENT_ID || !env.OIDC_CLIENT_SECRET) {
+    throw AuthenticationError("OIDC client credentials are missing");
+  }
 
-  for (const required of ["email", "nickname", "avatar_url"]) {
-    if (!requested.includes(required)) {
-      requested.push(required);
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/x-www-form-urlencoded",
+    Authorization: `Basic ${Buffer.from(
+      `${env.OIDC_CLIENT_ID}:${env.OIDC_CLIENT_SECRET}`
+    ).toString("base64")}`,
+  };
+
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    client_id: env.OIDC_CLIENT_ID,
+  });
+
+  if (codeVerifier) {
+    body.set("code_verifier", codeVerifier);
+  }
+
+  const response = await fetch(tokenURL, {
+    method: "POST",
+    allowPrivateIPAddress: true,
+    headers,
+    body,
+  });
+
+  if (!response.ok) {
+    Logger.error("OIDC token exchange failed", new Error("Token exchange"), {
+      status: response.status,
+      body: await response.text().catch(() => undefined),
+    });
+    throw AuthenticationError("Failed to exchange OIDC authorization code");
+  }
+
+  const data = (await response.json()) as OIDCTokenResponse;
+  const accessToken = parseString(data?.access_token);
+  if (!accessToken) {
+    throw AuthenticationError("OIDC token response is missing access_token");
+  }
+
+  return {
+    accessToken,
+    refreshToken: parseString(data?.refresh_token),
+    expiresIn: parseNumber(data?.expires_in),
+    scope: parseString(data?.scope),
+    idToken: parseString(data?.id_token),
+  };
+};
+
+const fetchOIDCUserInfo = async ({
+  accessToken,
+  userInfoURL,
+}: {
+  accessToken: string;
+  userInfoURL: string;
+}): Promise<OIDCClaims> => {
+  const response = await fetch(userInfoURL, {
+    method: "GET",
+    allowPrivateIPAddress: true,
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    Logger.error("OIDC userinfo request failed", new Error("UserInfo"), {
+      status: response.status,
+      body: await response.text().catch(() => undefined),
+    });
+    throw AuthenticationError("Failed to fetch OIDC user info");
+  }
+
+  return (await response.json()) as OIDCClaims;
+};
+
+const dedupeScopes = (input: string[]) => {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const scope of input) {
+    if (!scope) {
+      continue;
     }
+    if (seen.has(scope)) {
+      continue;
+    }
+    seen.add(scope);
+    output.push(scope);
   }
-
-  return requested;
-};
-
-const requestConsent = async (stateToken?: string) => {
-  const baseUrlWithApi = getPassportApiBaseUrl();
-  const passportClient = getPassportClient();
-
-  if (!baseUrlWithApi || !env.PASSPORT_API_TOKEN || !passportClient) {
-    throw AuthenticationError(
-      "Passport consent configuration is missing (PASSPORT_API_BASE_URL, PASSPORT_API_TOKEN, OIDC_CLIENT_ID, URL)"
-    );
-  }
-
-  const consentRequestUrl = `${baseUrlWithApi}/services/consent/request`;
-  const headers = {
-    "X-API-Token": env.PASSPORT_API_TOKEN,
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-
-  const requestRes = await fetch(consentRequestUrl, {
-    method: "POST",
-    allowPrivateIPAddress: true,
-    headers,
-    body: JSON.stringify({
-      client_id: passportClient.client_id,
-      redirect_uri: passportClient.redirect_uris?.[0],
-      fields: buildRequestedFields(passportClient),
-      state: stateToken,
-    }),
-  });
-
-  if (!requestRes.ok) {
-    Logger.error(
-      "Passport consent request failed",
-      new Error("Consent request failed"),
-      {
-        status: requestRes.status,
-        body: await requestRes.text().catch(() => undefined),
-      }
-    );
-    throw AuthenticationError("Failed to initiate Passport consent flow");
-  }
-
-  const requestData = (await requestRes.json()) as {
-    request_id: string;
-    consent_url?: string;
-  };
-
-  if (!requestData?.request_id || !requestData.consent_url) {
-    throw AuthenticationError(
-      "Passport consent request did not return request_id/consent_url"
-    );
-  }
-
-  return requestData;
-};
-
-const exchangeConsentCode = async (code: string) => {
-  const baseUrlWithApi = getPassportApiBaseUrl();
-  const passportClient = getPassportClient();
-
-  if (!baseUrlWithApi || !env.PASSPORT_API_TOKEN || !passportClient) {
-    throw AuthenticationError(
-      "Passport consent configuration is missing (PASSPORT_API_BASE_URL, PASSPORT_API_TOKEN, OIDC_CLIENT_ID, URL)"
-    );
-  }
-
-  const consentTokenUrl = `${baseUrlWithApi}/services/consent/token`;
-  const headers = {
-    "X-API-Token": env.PASSPORT_API_TOKEN,
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-
-  const tokenRes = await fetch(consentTokenUrl, {
-    method: "POST",
-    allowPrivateIPAddress: true,
-    headers,
-    body: JSON.stringify({
-      code,
-      client_id: passportClient.client_id,
-    }),
-  });
-
-  if (!tokenRes.ok) {
-    Logger.error(
-      "Passport consent token exchange failed",
-      new Error("Consent token exchange failed"),
-      {
-        status: tokenRes.status,
-        body: await tokenRes.text().catch(() => undefined),
-      }
-    );
-    throw AuthenticationError("Failed to exchange Passport consent token");
-  }
-
-  const tokenData = (await tokenRes.json()) as { user?: PassportProfile };
-  if (!tokenData?.user) {
-    throw AuthenticationError(
-      "Passport consent token did not return user data"
-    );
-  }
-
-  return tokenData.user;
+  return output;
 };
 
 /**
@@ -214,26 +216,68 @@ export function createOIDCRouter(
   router: Router,
   endpoints: OIDCEndpoints
 ): void {
-  const scopes = env.OIDC_SCOPES.split(" ");
+  if (
+    !endpoints.authorizationURL ||
+    !endpoints.tokenURL ||
+    !endpoints.userInfoURL
+  ) {
+    throw new Error("OIDC endpoints are not configured");
+  }
+
+  const scopes = dedupeScopes(
+    env.OIDC_SCOPES.split(" ").map((scope) => scope.trim())
+  );
+  if (!scopes.includes("openid")) {
+    scopes.unshift("openid");
+  }
+
+  const redirectUri = `${env.URL}/auth/${config.id}.callback`;
   const stateStore = new StateStore(endpoints.pkce);
+  const pkceEnabled = !!endpoints.pkce;
 
   router.get(config.id, async (ctx: Context) => {
     try {
       let stateToken: string | undefined;
+      let codeVerifier: string | undefined;
+
       await new Promise<void>((resolve, reject) => {
-        stateStore.store(ctx, (err, token) => {
+        const callback = (err: Error | null, token?: string) => {
           if (err || !token) {
             return reject(err ?? new Error("Failed to store state"));
           }
           stateToken = token;
           return resolve();
-        });
+        };
+
+        if (pkceEnabled) {
+          codeVerifier = generateCodeVerifier();
+          // @ts-expect-error types from passport-oauth2 are not aligned with our custom store.
+          stateStore.store(ctx, codeVerifier, undefined, undefined, callback);
+          return;
+        }
+
+        // @ts-expect-error types from passport-oauth2 are not aligned with our custom store.
+        stateStore.store(ctx, callback);
       });
 
-      const consent = await requestConsent(stateToken);
-      return ctx.redirect(consent.consent_url);
+      const authorizationUrl = new URL(endpoints.authorizationURL!);
+      authorizationUrl.searchParams.set("response_type", "code");
+      authorizationUrl.searchParams.set("client_id", env.OIDC_CLIENT_ID ?? "");
+      authorizationUrl.searchParams.set("redirect_uri", redirectUri);
+      authorizationUrl.searchParams.set("scope", scopes.join(" "));
+      authorizationUrl.searchParams.set("state", stateToken ?? "");
+
+      if (pkceEnabled && codeVerifier) {
+        authorizationUrl.searchParams.set(
+          "code_challenge",
+          generateCodeChallenge(codeVerifier)
+        );
+        authorizationUrl.searchParams.set("code_challenge_method", "S256");
+      }
+
+      return ctx.redirect(authorizationUrl.toString());
     } catch (err) {
-      Logger.error("Error initiating Passport consent flow", err as Error);
+      Logger.error("Error initiating OIDC authentication flow", err as Error);
       throw AuthenticationError("Failed to start authentication");
     }
   });
@@ -261,12 +305,20 @@ export function createOIDCRouter(
 
     const code = getParam("code")?.toString();
     const state = getParam("state")?.toString();
+    const error = getParam("error")?.toString();
+    const errorDescription = getParam("error_description")?.toString();
     const stateCookie = ctx.cookies.get(stateStore.key);
     const parsedState = stateCookie ? parseState(stateCookie) : undefined;
 
     try {
+      if (error) {
+        throw AuthenticationError(
+          `OIDC error: ${error}${errorDescription ? ` (${errorDescription})` : ""}`
+        );
+      }
+
       if (!code) {
-        throw AuthenticationError("Missing consent code");
+        throw AuthenticationError("Missing authorization code");
       }
 
       await new Promise<void>((resolve, reject) => {
@@ -278,12 +330,26 @@ export function createOIDCRouter(
         });
       });
 
-      const passportProfile = await exchangeConsentCode(code);
-      const email = passportProfile.email;
+      const { accessToken, refreshToken, expiresIn, scope, idToken } =
+        await exchangeAuthorizationCode({
+          code,
+          redirectUri,
+          codeVerifier: parsedState?.codeVerifier,
+          tokenURL: endpoints.tokenURL!,
+        });
+
+      const userInfo = await fetchOIDCUserInfo({
+        accessToken,
+        userInfoURL: endpoints.userInfoURL!,
+      });
+      const idTokenClaims = decodeIdToken(idToken);
+
+      const email =
+        parseString(userInfo?.email) ?? parseString(idTokenClaims?.email);
 
       if (!email) {
         throw AuthenticationError(
-          `An email field was not returned from Passport consent, but is required.`
+          "An email field was not returned from OIDC userinfo, but is required."
         );
       }
 
@@ -324,30 +390,48 @@ export function createOIDCRouter(
 
       const profileDebugInfo = {
         email,
-        passportProfile,
+        userInfo,
       };
 
-      const failWithPassportProfileError = (message: string) => {
+      const failWithProfileError = (message: string) => {
         const error = AuthenticationError(message);
         Logger.error(message, error, profileDebugInfo);
         throw error;
       };
 
-      const name = passportProfile.nickname;
+      const usernameClaim = env.OIDC_USERNAME_CLAIM || "preferred_username";
+      const name =
+        parseString(get(userInfo, usernameClaim)) ??
+        parseString(get(idTokenClaims, usernameClaim)) ??
+        parseString(userInfo?.name) ??
+        parseString(userInfo?.preferred_username) ??
+        parseString(userInfo?.nickname);
       if (!name) {
-        failWithPassportProfileError(
-          `Passport profile for ${email} is missing a name.`
+        failWithProfileError(
+          `OIDC profile for ${email} is missing a name (${usernameClaim}).`
         );
       }
 
-      let avatarUrl = passportProfile.avatar_url ?? null;
+      let avatarUrl =
+        parseString(userInfo?.picture) ??
+        parseString(userInfo?.avatar_url) ??
+        parseString(idTokenClaims?.picture) ??
+        null;
       if (avatarUrl && isBase64Url(avatarUrl)) {
-        failWithPassportProfileError(
-          `Passport avatar for ${email} is invalid.`
-        );
+        failWithProfileError(`OIDC avatar for ${email} is invalid.`);
       }
 
       const ctxWithIp = createContext({ ip: ctx.ip });
+      const authProviderId =
+        parseString(userInfo?.sub) ?? parseString(idTokenClaims?.sub) ?? email;
+
+      const tokenScopes = dedupeScopes(
+        (scope ? scope.split(" ") : scopes).map((s) => s.trim())
+      );
+      if (!tokenScopes.includes("openid")) {
+        tokenScopes.unshift("openid");
+      }
+
       const result = await accountProvisioner(ctxWithIp, {
         team: {
           teamId: team?.id,
@@ -360,30 +444,26 @@ export function createOIDCRouter(
           name,
           email,
           avatarUrl,
-          language: normalizeLanguage(passportProfile?.preferred_language),
+          language: normalizeLanguage(
+            parseString(userInfo?.locale) ?? parseString(idTokenClaims?.locale)
+          ),
         },
         authenticationProvider: {
           name: config.id,
           providerId,
         },
         authentication: {
-          providerId:
-            passportProfile.id ??
-            passportProfile.logto_id ??
-            passportProfile.email,
-          // Passport OAuth-lite consent returns a short-lived, one-time `code`.
-          // This is not a reusable access token and must not be stored for
-          // later validation/refresh.
-          accessToken: "",
-          refreshToken: undefined,
-          expiresIn: undefined,
-          scopes,
+          providerId: authProviderId,
+          accessToken,
+          refreshToken,
+          expiresIn,
+          scopes: tokenScopes,
         },
       });
 
       await signIn(ctx, config.id, { ...result, client });
     } catch (err) {
-      Logger.error("Error completing Passport consent flow", err as Error);
+      Logger.error("Error completing OIDC authentication flow", err as Error);
 
       if (err && typeof err === "object" && "id" in err) {
         const notice = String((err as { id: string }).id).replace(/_/g, "-");

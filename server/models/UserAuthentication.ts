@@ -5,7 +5,6 @@ import {
   InferCreationAttributes,
   SaveOptions,
 } from "sequelize";
-import { InvalidRequestError } from "@server/errors";
 import {
   BeforeCreate,
   BeforeUpdate,
@@ -17,7 +16,6 @@ import {
   Unique,
 } from "sequelize-typescript";
 import Logger from "@server/logging/Logger";
-import fetch from "@server/utils/fetch";
 import AuthenticationProvider from "./AuthenticationProvider";
 import User from "./User";
 import IdModel from "./base/IdModel";
@@ -111,70 +109,6 @@ class UserAuthentication extends IdModel<
     );
 
     try {
-      // HackIt Passport OAuth-lite consent does not yield a reusable access token.
-      // Instead validate the user's existence/banned-state via Passport service API.
-      if (authenticationProvider.name === "oidc") {
-        const baseUrl = process.env.PASSPORT_API_BASE_URL?.replace(/\/+$/, "");
-        const apiToken = process.env.PASSPORT_API_TOKEN;
-        const baseUrlWithApi = baseUrl
-          ? /\/api$/i.test(baseUrl)
-            ? baseUrl
-            : `${baseUrl}/api`
-          : undefined;
-
-        if (baseUrlWithApi && apiToken) {
-          const user = await User.findByPk(this.userId, {
-            attributes: ["email"],
-            transaction: options.transaction,
-          });
-
-          const email = user?.email;
-          if (!email) {
-            return false;
-          }
-
-          const profileUrl = `${baseUrlWithApi}/services/profile-by-email?email=${encodeURIComponent(
-            email
-          )}`;
-
-          const response = await fetch(profileUrl, {
-            method: "GET",
-            allowPrivateIPAddress: true,
-            headers: {
-              "X-API-Token": apiToken,
-              Accept: "application/json",
-            },
-          }).catch((err) => {
-            throw InvalidRequestError((err as Error).message);
-          });
-
-          if (!response.ok) {
-            throw InvalidRequestError(
-              `Passport profile lookup failed (${response.status})`
-            );
-          }
-
-          let data: unknown;
-          try {
-            data = await response.json();
-          } catch (err) {
-            throw InvalidRequestError((err as Error).message);
-          }
-
-          const found = !!(data as { found?: boolean })?.found;
-          if (!found) {
-            return false;
-          }
-
-          this.lastValidatedAt = new Date();
-          await this.save({
-            transaction: options.transaction,
-          });
-
-          return true;
-        }
-      }
-
       await this.refreshAccessTokenIfNeeded(authenticationProvider, options);
 
       const client = authenticationProvider.oauthClient;
