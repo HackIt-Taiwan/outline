@@ -9,6 +9,7 @@ import { slugifyDomain } from "@shared/utils/domains";
 import { parseEmail } from "@shared/utils/email";
 import { isBase64Url } from "@shared/utils/urls";
 import accountProvisioner from "@server/commands/accountProvisioner";
+import appEnv from "@server/env";
 import {
   OIDCMalformedUserInfoError,
   AuthenticationError,
@@ -84,6 +85,34 @@ const generateCodeVerifier = () => toBase64Url(crypto.randomBytes(32));
 const generateCodeChallenge = (verifier: string) =>
   toBase64Url(crypto.createHash("sha256").update(verifier).digest());
 
+const OIDC_REQUEST_TIMEOUT_MS = Math.max(
+  2000,
+  Math.floor(appEnv.REQUEST_TIMEOUT * 0.45)
+);
+
+const withOidcTimeout = async <T>(
+  label: string,
+  url: string,
+  run: (signal: AbortSignal) => Promise<T>
+): Promise<T> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OIDC_REQUEST_TIMEOUT_MS);
+  try {
+    return await run(controller.signal);
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      Logger.error(`${label} timed out`, new Error("Timeout"), {
+        url,
+        timeoutMs: OIDC_REQUEST_TIMEOUT_MS,
+      });
+      throw AuthenticationError("OIDC request timed out");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 const decodeIdToken = (raw?: string): OIDCClaims | undefined => {
   if (!raw) {
     return undefined;
@@ -136,12 +165,18 @@ const exchangeAuthorizationCode = async ({
     body.set("code_verifier", codeVerifier);
   }
 
-  const response = await fetch(tokenURL, {
-    method: "POST",
-    allowPrivateIPAddress: true,
-    headers,
-    body,
-  });
+  const response = await withOidcTimeout(
+    "OIDC token exchange",
+    tokenURL,
+    (signal) =>
+      fetch(tokenURL, {
+        method: "POST",
+        allowPrivateIPAddress: true,
+        headers,
+        body,
+        signal,
+      })
+  );
 
   if (!response.ok) {
     Logger.error("OIDC token exchange failed", new Error("Token exchange"), {
@@ -173,14 +208,20 @@ const fetchOIDCUserInfo = async ({
   accessToken: string;
   userInfoURL: string;
 }): Promise<OIDCClaims> => {
-  const response = await fetch(userInfoURL, {
-    method: "GET",
-    allowPrivateIPAddress: true,
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  const response = await withOidcTimeout(
+    "OIDC userinfo request",
+    userInfoURL,
+    (signal) =>
+      fetch(userInfoURL, {
+        method: "GET",
+        allowPrivateIPAddress: true,
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        signal,
+      })
+  );
 
   if (!response.ok) {
     Logger.error("OIDC userinfo request failed", new Error("UserInfo"), {
