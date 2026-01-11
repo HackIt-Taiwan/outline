@@ -1,6 +1,6 @@
 import { AnimatePresence } from "framer-motion";
 import { observer } from "mobx-react";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useRouteMatch } from "react-router-dom";
 import styled from "styled-components";
@@ -36,6 +36,21 @@ function Comments() {
   const focusedComment = useFocusedComment();
   const can = usePolicy(document);
   const isMobile = useMobile();
+  const commentMarks = useMemo(
+    () => (editor && isEditorInitialized ? editor.getComments() : []),
+    [editor, isEditorInitialized, comments.data.size]
+  );
+  const referencedCommentIds = useMemo(
+    () => commentMarks.map((comment) => comment.id),
+    [commentMarks]
+  );
+  const anchorTextByCommentId = useMemo(() => {
+    const anchorTexts: Record<string, string> = {};
+    for (const mark of commentMarks) {
+      anchorTexts[mark.id] = `${anchorTexts[mark.id] ?? ""}${mark.text}`;
+    }
+    return anchorTexts;
+  }, [commentMarks]);
 
   const query = useQuery();
   const [viewingResolved, setViewingResolved] = useState(
@@ -65,7 +80,7 @@ function Comments() {
   )
     ? {
         type: CommentSortType.OrderInDocument,
-        referencedCommentIds: editor?.getComments().map((c) => c.id) ?? [],
+        referencedCommentIds,
       }
     : { type: CommentSortType.MostRecent };
 
@@ -146,6 +161,7 @@ function Comments() {
                   document={document}
                   recessed={!!focusedComment && focusedComment.id !== thread.id}
                   focused={focusedComment?.id === thread.id}
+                  highlightedText={anchorTextByCommentId[thread.id]}
                 />
               ))
             ) : (

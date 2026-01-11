@@ -7,7 +7,6 @@ import styled, { css } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 import { s, hover } from "@shared/styles";
 import { ProsemirrorData } from "@shared/types";
-import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
 import Comment from "~/models/Comment";
 import Document from "~/models/Document";
 import { AvatarSize } from "~/components/Avatar";
@@ -30,6 +29,8 @@ type Props = {
   document: Document;
   /** The root comment to render */
   comment: Comment;
+  /** Text to highlight for the thread */
+  highlightedText?: string;
   /** Whether the thread is focused */
   focused: boolean;
   /** Whether the thread is displayed in a recessed/backgrounded state */
@@ -43,6 +44,7 @@ type Props = {
 function CommentThread({
   comment: thread,
   document,
+  highlightedText,
   recessed,
   focused,
   collapseThreshold = 5,
@@ -70,11 +72,6 @@ function CommentThread({
   );
 
   const canReply = can.comment && !thread.isResolved;
-
-  const highlightedText = ProsemirrorHelper.getAnchorTextForComment(
-    editor?.getComments() ?? [],
-    thread.id
-  );
 
   const commentsInThread = comments
     .inThread(thread.id)
