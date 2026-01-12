@@ -155,7 +155,7 @@ function CommentThreadItem({
   const handleUpdate = React.useCallback(
     (attrs: { resolved: boolean }) => {
       onUpdate?.(comment.id, attrs);
-      if ("resolved" in attrs) {
+      if (attrs.resolved) {
         setFocusedCommentId(null);
       }
     },
@@ -320,6 +320,7 @@ const ResolveButton = ({
         action={resolveCommentFactory({
           comment,
           onResolve: () => onUpdate({ resolved: true }),
+          onRevert: () => onUpdate({ resolved: false }),
         })}
         $rounded
       >

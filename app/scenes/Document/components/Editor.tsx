@@ -90,6 +90,15 @@ function DocumentEditor(props: Props, ref: React.RefObject<any>) {
   }, [ref]);
 
   React.useEffect(() => {
+    if (!commentingEnabled || !can.comment) {
+      return;
+    }
+
+    void import("~/scenes/Document/components/Comments");
+    void import("~/scenes/Document/components/CommentEditor");
+  }, [commentingEnabled, can.comment]);
+
+  React.useEffect(() => {
     if (focusedComment) {
       const viewingResolved = params.get("resolved") === "";
       if (

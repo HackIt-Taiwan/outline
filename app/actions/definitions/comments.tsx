@@ -1,4 +1,5 @@
 import { DoneIcon, SmileyIcon, TrashIcon } from "outline-icons";
+import { runInAction } from "mobx";
 import { toast } from "sonner";
 import Comment from "~/models/Comment";
 import CommentDeleteDialog from "~/components/CommentDeleteDialog";
@@ -35,9 +36,11 @@ export const deleteCommentFactory = ({
 export const resolveCommentFactory = ({
   comment,
   onResolve,
+  onRevert,
 }: {
   comment: Comment;
   onResolve: () => void;
+  onRevert?: () => void;
 }) =>
   createActionV2({
     name: ({ t }) => t("Mark as resolved"),
@@ -47,19 +50,49 @@ export const resolveCommentFactory = ({
     visible: ({ stores }) =>
       stores.policies.abilities(comment.id).resolve &&
       stores.policies.abilities(comment.documentId).update,
-    perform: async ({ t }) => {
-      await comment.resolve();
+    perform: async ({ t, stores, currentUserId }) => {
+      const previousResolvedAt = comment.resolvedAt;
+      const previousResolvedById = comment.resolvedById ?? null;
+      const previousResolvedBy = comment.resolvedBy ?? null;
+      const optimisticResolvedAt = new Date().toISOString();
+
+      runInAction(() => {
+        comment.resolvedAt = optimisticResolvedAt;
+        if (currentUserId) {
+          comment.resolvedById = currentUserId;
+          const resolvedBy = stores.users.get(currentUserId);
+          if (resolvedBy) {
+            comment.resolvedBy = resolvedBy;
+          }
+        }
+      });
       onResolve();
-      toast.success(t("Thread resolved"));
+
+      try {
+        await comment.resolve();
+        toast.success(t("Thread resolved"));
+      } catch (error) {
+        runInAction(() => {
+          if (comment.resolvedAt === optimisticResolvedAt) {
+            comment.resolvedAt = previousResolvedAt;
+            comment.resolvedById = previousResolvedById;
+            comment.resolvedBy = previousResolvedBy;
+          }
+        });
+        onRevert?.();
+        throw error;
+      }
     },
   });
 
 export const unresolveCommentFactory = ({
   comment,
   onUnresolve,
+  onRevert,
 }: {
   comment: Comment;
   onUnresolve: () => void;
+  onRevert?: () => void;
 }) =>
   createActionV2({
     name: ({ t }) => t("Mark as unresolved"),
@@ -70,8 +103,30 @@ export const unresolveCommentFactory = ({
       stores.policies.abilities(comment.id).unresolve &&
       stores.policies.abilities(comment.documentId).update,
     perform: async () => {
-      await comment.unresolve();
+      const previousResolvedAt = comment.resolvedAt;
+      const previousResolvedById = comment.resolvedById ?? null;
+      const previousResolvedBy = comment.resolvedBy ?? null;
+
+      runInAction(() => {
+        comment.resolvedAt = null;
+        comment.resolvedById = null;
+        comment.resolvedBy = null;
+      });
       onUnresolve();
+
+      try {
+        await comment.unresolve();
+      } catch (error) {
+        runInAction(() => {
+          if (comment.resolvedAt == null) {
+            comment.resolvedAt = previousResolvedAt;
+            comment.resolvedById = previousResolvedById;
+            comment.resolvedBy = previousResolvedBy;
+          }
+        });
+        onRevert?.();
+        throw error;
+      }
     },
   });
 

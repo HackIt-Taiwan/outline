@@ -64,10 +64,12 @@ function CommentMenu({
       resolveCommentFactory({
         comment,
         onResolve: () => onUpdate({ resolved: true }),
+        onRevert: () => onUpdate({ resolved: false }),
       }),
       unresolveCommentFactory({
         comment,
         onUnresolve: () => onUpdate({ resolved: false }),
+        onRevert: () => onUpdate({ resolved: true }),
       }),
       viewCommentReactionsFactory({
         comment,

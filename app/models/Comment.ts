@@ -62,7 +62,7 @@ class Comment extends Model {
    * The date and time that this comment was resolved, if it has been resolved.
    */
   @observable
-  resolvedAt: string;
+  resolvedAt: string | null;
 
   /**
    * The user who resolved this comment, if it has been resolved.
