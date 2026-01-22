@@ -557,6 +557,25 @@ export const downloadDocumentAsPDF = createActionV2({
   },
 });
 
+export const downloadDocumentAsDocx = createActionV2({
+  name: ({ t }) => t("DOCX"),
+  analyticsName: "Download document as DOCX",
+  section: ActiveDocumentSection,
+  keywords: "docx word export",
+  icon: <DownloadIcon />,
+  iconInContextMenu: false,
+  visible: ({ activeDocumentId, stores }) =>
+    !!activeDocumentId && stores.policies.abilities(activeDocumentId).download,
+  perform: async ({ activeDocumentId, stores }) => {
+    if (!activeDocumentId) {
+      return;
+    }
+
+    const document = stores.documents.get(activeDocumentId);
+    await document?.download(ExportContentType.Docx);
+  },
+});
+
 export const downloadDocumentAsMarkdown = createActionV2({
   name: ({ t }) => t("Markdown"),
   analyticsName: "Download document as Markdown",
@@ -587,6 +606,7 @@ export const downloadDocument = createActionV2WithChildren({
   children: [
     downloadDocumentAsHTML,
     downloadDocumentAsPDF,
+    downloadDocumentAsDocx,
     downloadDocumentAsMarkdown,
   ],
 });
@@ -1415,8 +1435,9 @@ export const enableKanban = createActionV2({
       return false;
     }
     const can = stores.policies.abilities(activeDocumentId);
-    const board = stores.boards
-      .orderedData.find((b) => b.documentId === activeDocumentId);
+    const board = stores.boards.orderedData.find(
+      (b) => b.documentId === activeDocumentId
+    );
     return can.update && !board;
   },
   perform: async ({ activeDocumentId, stores, t }) => {

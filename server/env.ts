@@ -695,6 +695,15 @@ export class Environment {
     this.toOptionalNumber(environment.MAXIMUM_EXPORT_SIZE) ?? os.totalmem();
 
   /**
+   * Enable PDF export for document downloads.
+   */
+  @Public
+  @IsBoolean()
+  public PDF_EXPORT_ENABLED = this.toBoolean(
+    environment.PDF_EXPORT_ENABLED ?? "true"
+  );
+
+  /**
    * The number of seconds access tokens issue by the OAuth provider are valid.
    */
   @IsNumber()

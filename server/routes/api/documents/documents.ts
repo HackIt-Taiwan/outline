@@ -13,7 +13,12 @@ import uniq from "lodash/uniq";
 import mime from "mime-types";
 import { Op, ScopeOptions, Sequelize, WhereOptions } from "sequelize";
 import { randomUUID } from "crypto";
-import { NavigationNode, StatusFilter, UserRole } from "@shared/types";
+import {
+  ExportContentType,
+  NavigationNode,
+  StatusFilter,
+  UserRole,
+} from "@shared/types";
 import { subtractDate } from "@shared/utils/date";
 import slugify from "@shared/utils/slugify";
 import documentCreator from "@server/commands/documentCreator";
@@ -27,7 +32,6 @@ import {
   InvalidRequestError,
   AuthenticationError,
   ValidationError,
-  IncorrectEditionError,
   NotFoundError,
 } from "@server/errors";
 import Logger from "@server/logging/Logger";
@@ -72,6 +76,7 @@ import EmptyTrashTask from "@server/queues/tasks/EmptyTrashTask";
 import FileStorage from "@server/storage/files";
 import { APIContext } from "@server/types";
 import { RateLimiterStrategy } from "@server/utils/RateLimiter";
+import { documentToDocx, documentToPdf } from "@server/utils/DocumentExporter";
 import ZipHelper from "@server/utils/ZipHelper";
 import { getTeamFromContext } from "@server/utils/passport";
 import { assertPresent } from "@server/validation";
@@ -757,6 +762,36 @@ router.post(
       includeState: !accept?.includes("text/markdown"),
     });
 
+    const fileName = slugify(document.titleWithDefault);
+
+    if (accept?.includes(ExportContentType.Docx)) {
+      const docx = await documentToDocx(document);
+
+      ctx.set("Content-Type", ExportContentType.Docx);
+      ctx.set(
+        "Content-Disposition",
+        contentDisposition(`${fileName}.docx`, {
+          type: "attachment",
+        })
+      );
+      ctx.body = docx;
+      return;
+    }
+
+    if (accept?.includes(ExportContentType.Pdf)) {
+      const pdf = await documentToPdf(document);
+
+      ctx.set("Content-Type", ExportContentType.Pdf);
+      ctx.set(
+        "Content-Disposition",
+        contentDisposition(`${fileName}.pdf`, {
+          type: "attachment",
+        })
+      );
+      ctx.body = pdf;
+      return;
+    }
+
     let contentType: string;
     let content: string;
 
@@ -766,10 +801,6 @@ router.post(
         centered: true,
         includeMermaid: true,
       });
-    } else if (accept?.includes("application/pdf")) {
-      throw IncorrectEditionError(
-        "PDF export is not available in the community edition"
-      );
     } else if (accept?.includes("text/markdown")) {
       contentType = "text/markdown";
       content = DocumentHelper.toMarkdown(document);
@@ -785,7 +816,6 @@ router.post(
     const extension =
       contentType === "text/markdown" ? "md" : mime.extension(contentType);
 
-    const fileName = slugify(document.titleWithDefault);
     const attachmentIds = ProsemirrorHelper.parseAttachmentIds(
       DocumentHelper.toProsemirror(document)
     );

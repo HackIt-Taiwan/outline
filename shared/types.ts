@@ -39,6 +39,7 @@ export enum ExportContentType {
   Markdown = "text/markdown",
   Html = "text/html",
   Pdf = "application/pdf",
+  Docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
 export enum FileOperationFormat {
